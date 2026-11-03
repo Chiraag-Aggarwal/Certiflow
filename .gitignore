@@ -1,0 +1,23 @@
+target/
+apache-maven-*/
+maven.zip
+.sixth/
+*.class
+.idea/
+*.iml
+.vscode/
+.tools/
+lib/
+data/
+logs/
+reports/
+.data.lock
+.certiflow.lock
+
+# Local credentials and editor files
+.env
+.env.*
+!.env.example
+*.user
+Thumbs.db
+Desktop.ini
