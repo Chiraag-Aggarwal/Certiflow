@@ -1,0 +1,4 @@
+# Copy to certiflow.properties and enter the project's public connection details.
+supabase.url=
+supabase.publishableKey=
+# Never put a database password, secret key, or service_role key in the desktop app.

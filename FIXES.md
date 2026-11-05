@@ -1,3 +1,49 @@
+# Administrator delegation, menu and Desktop launcher — 5 November 2026
+
+- Added original-administrator controls in **Menu → Accounts**: choose **Admin**, press **Update account access**, and confirm to promote another email-verified account. The original administrator can also remove another admin's access. Ordinary administrators keep Student, Recruiter / Viewer and Teacher controls; the founding account and self-role changes remain protected.
+- Installed migration 008 with server-derived delegation capability, ordered actor/target row locks, confirmed-account checks, and private immutable role-change history. Authority is anchored to the original bootstrap user ID; no existing account or reserved Gmail was changed by the migration. Live rollback-only verification passed for grants, revocation, permission boundaries, audit records and preserved ownership.
+- Moved **Profile** to the menu footer directly above **Log out** for every role.
+- Preserved the original in-app `logo.png` and its aspect ratio. Separate `app-icon.png` and `app-icon.ico` assets provide window/taskbar and Windows shortcut icons.
+- Added `install-desktop-shortcut.ps1` to create or refresh **Certiflow.lnk** on the current user's Desktop without duplicating the project. It packages the icon at multiple Windows sizes. Run the installer with PowerShell 7 (`pwsh`); Windows PowerShell 5 blocks script files on the prepared PC. No execution policy is changed. `fix_icon.ps1` calls the same installer.
+- The Desktop shortcut targets bundled `javaw.exe` directly with the JavaFX/module paths, class paths and project working directory. It opens the current compiled build without a console or helper script. Existing `Run-Certiflow.bat` / `run.bat` launchers rebuild source when needed; Supabase operations still require an internet connection.
+- Validation: the complete local automated suite passed all 82 tests. Live migration 008 and its rollback checks passed; the original administrator remains ADMIN with `can_manage_admins=true`, and no test fixtures remain. Double-clicking the Desktop shortcut successfully opened the branded sign-in screen. The existing menu test also passed with open-drawer previews at 390 and 1366 pixels. Live database and Desktop launch proof are saved in `previews/admin-branding`; drawer previews are in `previews/chat-sharing`.
+
+# Unified sign-in, viewer accounts, chat and sharing — 5 November 2026
+
+- Replaced role-selection login pages with one email/password form. The server profile selects Student, Recruiter / Viewer, Teacher, or Admin workspace; a client-supplied role hint cannot grant access.
+- Signup offers Student or Recruiter / Viewer only, followed immediately by email verification. Viewer organisation details are optional. Existing administrator and teacher permissions are preserved; the designated Gmail account was verified to remain a confirmed ADMIN.
+- Added a viewer Discover workspace for student-published projects, achievements, selected files and NOC summaries. Viewers can edit their own profile and contact staff, but cannot view private student data, create student submissions, approve requests, or assign roles.
+- Rebuilt Messages with a searchable recent-conversation inbox, unread counts, 50-message history pages, sender-only editing with conflict detection, read/edited indicators, per-account settings, and drafts retained while switching conversations. The composer stays visible while history scrolls on phone-sized and laptop windows.
+- Added explicit Community / public-link / both sharing choices with a reviewed preview and individually selected project files. Existing content is private by default. NOC reasons, staff notes, account email and institution IDs are excluded; published NOC status comes from the original record.
+- Published the static read-only link viewer at https://chiraag-aggarwal.github.io/Certiflow/. Only `docs` was committed and pushed for hosting, using the repository's configured human identity. Remaining application changes are saved in the existing Desktop project.
+- Installed migrations 005–007. Live rollback-only checks passed for history/editing, publication privacy/revocation/storage scope, viewer restrictions, preserved teacher access, and unchanged administrator bootstrap. No test accounts, messages or publications remain in the live project.
+- Validation: all 74 automated tests passed; the final interface-only check also passed all 18 tests after colour polish. Populated chat viewport checks cover 320, 390, 768 and 1366 pixels; saved previews are in `previews/chat-sharing`. Public viewer home, invalid-link and unavailable-link states were checked in the browser.
+- Current scope: Discover lists opted-in item publications. Whole-profile public pages, verified-company badges, and direct recruiter-to-student contact requests are separate future features. Viewer signup alone never verifies a company.
+
+# Portfolio, profile and communication updates — 5 November 2026
+
+- Added editable portfolio entries for projects, certificates, achievements, experience and documents, with multiple files, links, rename/delete controls and failed-file retries.
+- Expanded NOC applications to 17 types and added real staff recipient selection. PostgreSQL restricts assigned applications, projects and downloads to their intended viewers.
+- Expanded profile editing for all roles, protected email/role fields, administrator-only teacher access controls, and identity checks that reset after identity edits.
+- Registration continues directly into a clearly labelled verification step, with the email filled in and the code field focused. Institution ID is optional.
+- Added useful dashboard next steps, profile completion and portfolio highlights using real records.
+- Added private in-app conversations, staff search, contact-switching drafts, read receipts and active-page refresh. Requests and projects provide direct conversation shortcuts.
+- Added database migrations 003 and 004. The second fixes a storage/attachment policy recursion found during live checks; existing records remain intact.
+- Validation: 50 local automated tests and live rollback-only collaboration access checks, including role escalation, assignment isolation, storage access, identity resets, private messages and message rate limits. No test records are retained in Supabase.
+
+# Real accounts and PostgreSQL — 5 November 2026
+
+- Back moved below the header, away from the menu button, across all roles.
+- Removed runtime sample accounts, hardcoded passwords, profile identities and seeded requests.
+- Connected Supabase Auth, PostgreSQL tables and private portfolio storage through HTTPS using a public client key.
+- Added verified email registration, email-code verification and password recovery, server-assigned roles, profile editing, session refresh, and logout.
+- Added database-enforced ownership, role checks, immutable decisions, duplicate-request prevention, and a private one-time administrator bootstrap.
+- Network operations run off the JavaFX thread; pages include an explicit Refresh control.
+- SMTP credentials are stored only in Supabase. Connection configuration is excluded from Git.
+- Historical local records are not imported into the real database.
+
+The sections below describe the earlier local version and are retained as change history.
+
 # Basic working fixes — 3 November 2026
 
 ## Fixed

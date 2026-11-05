@@ -21,6 +21,10 @@ final class AuthLayout {
     static VBox create(VBox content) { return create(content, false); }
 
     static VBox create(VBox content, boolean canReturn) {
+        return create(content, canReturn ? App::showOptionView : null);
+    }
+
+    static VBox create(VBox content, Runnable returnToSignIn) {
         VBox root = new VBox();
         root.setId("auth-page");
         root.getStyleClass().add("auth-page");
@@ -69,12 +73,17 @@ final class AuthLayout {
         javafx.scene.layout.StackPane paper = new javafx.scene.layout.StackPane(new AcademicBackdrop(), scroll);
         paper.setMinSize(0, 0);
         VBox.setVgrow(paper, Priority.ALWAYS);
-        javafx.scene.control.Button back = Ui.iconButton("back", "Return to role selection", App::showOptionView);
-        back.setId("return-button");
-        back.setDisable(!canReturn);
-        HBox header = new HBox(back);
-        header.setPadding(new Insets(12, 16, 0, 16));
-        root.getChildren().addAll(header, paper);
+        if (returnToSignIn != null) {
+            javafx.scene.control.Button back = Ui.iconButton("back", "Return to sign in", returnToSignIn);
+            back.setId("return-button");
+            back.setText("Back");
+            back.setMinWidth(84);
+            back.setPrefWidth(84);
+            back.setMaxWidth(84);
+            back.getStyleClass().add("page-back-button");
+            surface.getChildren().add(1, back);
+        }
+        root.getChildren().add(paper);
 
         Runnable resize = () -> {
             boolean wide = root.getWidth() >= 960;
@@ -118,29 +127,33 @@ final class AuthLayout {
         VBox intro = new VBox(28);
         intro.setMinWidth(0);
         intro.getStyleClass().add("auth-introduction");
-        HBox logo = new HBox(Ui.logo(82));
+        Node artwork = Ui.logo(180); artwork.setId("auth-hero-logo");
+        HBox logo = new HBox(artwork);
         logo.setAlignment(Pos.CENTER);
-        logo.setMaxWidth(100);
+        logo.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        logo.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
         logo.getStyleClass().add("auth-logo-tile");
-        Label title = label("Every request.\nOne clear path.", "auth-hero-title");
-        Label subtitle = label("Submit documents, request a clearance, and follow each decision from one place.", "auth-hero-subtitle");
+        Label title = label("Your work.\nReady for what’s next.", "auth-hero-title");
+        Label subtitle = label("Build your portfolio, manage NOC applications, and discover student work in one place.", "auth-hero-subtitle");
         VBox copy = new VBox(16, title, subtitle);
         VBox steps = new VBox(18,
-            step("01", "Keep documents together", "Your portfolio, ready when you need it."),
-            step("02", "Send a clear request", "Submit an NOC application in a few steps."),
-            step("03", "See where it stands", "Track approvals and feedback as they arrive."));
-        javafx.scene.image.ImageView books = AcademicArt.books(190);
-        HBox artRow = new HBox(24, logo, books);
+            step("01", "Show what you can do", "Bring your projects and achievements together."),
+            step("02", "Keep applications moving", "Submit NOC requests and follow their progress."),
+            step("03", "Discover student work", "Explore portfolios shared by their owners."));
+        javafx.scene.image.ImageView books = AcademicArt.books(130);
+        HBox artRow = new HBox(18, logo, books);
         artRow.setAlignment(Pos.CENTER_LEFT);
         intro.getChildren().addAll(artRow, copy, steps);
         return intro;
     }
 
     private static VBox compactBrand() {
-        HBox logo = new HBox(Ui.logo(50));
+        Node artwork = Ui.logoMark(40); artwork.setId("auth-compact-logo");
+        HBox logo = new HBox(artwork);
         logo.setAlignment(Pos.CENTER);
+        logo.setMinSize(52, 52); logo.setPrefSize(52, 52); logo.setMaxSize(52, 52);
         logo.getStyleClass().add("auth-compact-logo");
-        VBox wordmark = new VBox(3, label("Certiflow", "auth-brand-name"), label("Student certifications", "auth-brand-caption"));
+        VBox wordmark = new VBox(3, label("Certiflow", "auth-brand-name"), label("Projects, approvals & discovery", "auth-brand-caption"));
         wordmark.setMinWidth(0);
         HBox line = new HBox(12, logo, wordmark);
         line.setAlignment(Pos.CENTER_LEFT);

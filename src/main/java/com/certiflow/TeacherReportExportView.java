@@ -66,7 +66,7 @@ public class TeacherReportExportView {
     }
 
     private void exportReport() {
-        if (App.user() == null || App.user().role() == AppData.Role.STUDENT) {
+        if (App.user() == null || !App.user().role().isStaff()) {
             Ui.error("Only a teacher or administrator can export request reports.");
             return;
         }

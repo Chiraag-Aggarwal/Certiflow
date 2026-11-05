@@ -45,7 +45,7 @@ public class App extends Application {
             if (dataLock == null) throw new IOException("Certiflow is already running. Please use the existing window.");
             data = new AppData(directory);
             UiSettings.load(directory);
-            try (var icon = App.class.getResourceAsStream("/logo.png")) {
+            try (var icon = App.class.getResourceAsStream("/app-icon.png")) {
                 if (icon != null) stage.getIcons().add(new Image(icon));
             }
             showOptionView();
@@ -78,6 +78,7 @@ public class App extends Application {
             Scene scene = new Scene(root, width, height);
             scene.getStylesheets().add(App.class.getResource("/style.css").toExternalForm());
             scene.getStylesheets().add(App.class.getResource("/auth.css").toExternalForm());
+            scene.getStylesheets().add(App.class.getResource("/chat.css").toExternalForm());
             primaryStage.setScene(scene);
         } else primaryStage.getScene().setRoot(root);
         if (UiSettings.animate()) {
@@ -87,21 +88,38 @@ public class App extends Application {
             fade.play();
         }
     }
-    public static boolean login(AppData.Role role, String username, String password) {
-        var account = data.authenticate(role, username, password);
+    public static boolean login(AppData.Role role, String username, String password) throws IOException {
+        var account = data.authenticate(username, password);
         if (account.isEmpty()) return false;
-        currentUser = account.get();
-        resetNavigation();
-        showHome();
+        completeLogin(account.get());
         return true;
     }
-    public static void logout() { currentUser = null; showOptionView(); }
-    public static void showOptionView() { currentUser = null; resetNavigation(); show(new OptionView().getView()); }
-    public static void showLoginView(String role, String emoji) { show(new LoginView(role, emoji).getView()); }
+    public static void completeLogin(AppData.User account) {
+        currentUser = account;
+        resetNavigation();
+        showHome();
+    }
+    public static void logout() { currentUser = null; Background.execute(() -> data.logout()); showOptionView(); }
+    public static void showOptionView() { currentUser = null; resetNavigation(); show(new LoginView().getView()); }
+    public static void showLoginView(String role, String email) { show(new LoginView(email).getView()); }
+    public static void showAccountView(String mode, String role) { show(new AccountView(mode, role).getView()); }
+    public static void showAccountView(String mode, String role, String email) { show(new AccountView(mode, role, email).getView()); }
+    public static void updatedUser(AppData.User user) { currentUser = user; }
+    public static void refreshCurrent(javafx.scene.Node busy) {
+        Background.run(busy, () -> { data.refresh(); return data.currentUser(); }, account -> {
+            if (currentUser == null || account == null) return;
+            if (currentUser.role() != account.role()) { currentUser = account; resetNavigation(); showHome(); return; }
+            currentUser = account;
+            String route = currentRoute;
+            if (route == null) { showHome(); return; }
+            backHistory.push(route); goBack();
+        }, error -> Ui.error(error.getMessage()));
+    }
     public static void showHome() {
         if (currentUser == null) showOptionView();
         else if (currentUser.role() == AppData.Role.STUDENT) showStudentDashboard();
-        else showTeacherHome();
+        else if (currentUser.role() == AppData.Role.VIEWER) showViewerHome();
+        else if (currentUser.role().isStaff()) showTeacherHome();
     }
     private static void student(String route, Supplier<Parent> view) {
         if (currentUser == null) { showOptionView(); return; }
@@ -110,19 +128,51 @@ public class App extends Application {
     }
     private static void staff(String route, Supplier<Parent> view) {
         if (currentUser == null) { showOptionView(); return; }
-        if (currentUser.role() == AppData.Role.STUDENT) { Ui.error("This page is for teachers and administrators."); return; }
+        if (!currentUser.role().isStaff()) { Ui.error("This page is for teachers and administrators."); return; }
         navigate(route, view);
     }
     public static void showStudentDashboard() { student("student-home", () -> new StudentDashboardView().getView()); }
     public static void showStudentNoc() { student("student-noc", () -> new StudentNocView().getView()); }
     public static void showStudentPortfolio() { student("student-portfolio", () -> new StudentPortfolioView().getView()); }
     public static void showStudentProfile() { student("student-profile", () -> new TeacherProfileView().getView()); }
+    private static void viewer(String route, Supplier<Parent> view) {
+        if (currentUser == null) { showOptionView(); return; }
+        if (currentUser.role() != AppData.Role.VIEWER) { Ui.error("This page is for recruiters and viewers."); return; }
+        navigate(route, view);
+    }
+    public static void showViewerHome() { viewer("viewer-home", () -> new CommunityView(true).getView()); }
+    public static void showViewerProfile() { viewer("viewer-profile", () -> new TeacherProfileView().getView()); }
+    public static void showOwnProfile() {
+        if (currentUser == null) { showOptionView(); return; }
+        switch (currentUser.role()) {
+            case STUDENT -> showStudentProfile();
+            case VIEWER -> showViewerProfile();
+            case TEACHER, ADMIN -> showTeacherProfile();
+        }
+    }
     public static void showTeacherHome() { staff("staff-home", () -> new TeacherHomeView().getView()); }
     public static void showTeacherDashboard() { staff("staff-requests", () -> new TeacherDashboardView().getView()); }
     public static void showTeacherHistory() { staff("staff-history", () -> new TeacherHistoryView().getView()); }
     public static void showTeacherStudentList() { staff("staff-students", () -> new TeacherStudentListView().getView()); }
     public static void showTeacherReportExport() { staff("staff-reports", () -> new TeacherReportExportView().getView()); }
     public static void showTeacherProfile() { staff("staff-profile", () -> new TeacherProfileView().getView()); }
+    public static void showSharedPortfolios() { staff("staff-portfolios", () -> new StaffPortfolioView().getView()); }
+    public static void showMessages() {
+        showMessages(null);
+    }
+    public static void showCommunity() {
+        if (currentUser == null) { showOptionView(); return; }
+        navigate("community", () -> new CommunityView().getView());
+    }
+    public static void showMessages(String contactId) {
+        if (currentUser == null) { showOptionView(); return; }
+        navigate("messages", () -> new MessagesView(contactId).getView());
+    }
+    public static void showAccountManagement() {
+        if (currentUser == null) { showOptionView(); return; }
+        if (currentUser.role() != AppData.Role.ADMIN) { Ui.error("Only an administrator can manage account access."); return; }
+        navigate("accounts", () -> new AccountManagementView().getView());
+    }
 
     public static javafx.beans.property.ReadOnlyBooleanProperty canReturnProperty() { return canReturn.getReadOnlyProperty(); }
 
@@ -153,12 +203,18 @@ public class App extends Application {
                 case "student-noc" -> showStudentNoc();
                 case "student-portfolio" -> showStudentPortfolio();
                 case "student-profile" -> showStudentProfile();
+                case "viewer-home" -> showViewerHome();
+                case "viewer-profile" -> showViewerProfile();
                 case "staff-home" -> showTeacherHome();
                 case "staff-requests" -> showTeacherDashboard();
                 case "staff-history" -> showTeacherHistory();
                 case "staff-students" -> showTeacherStudentList();
                 case "staff-reports" -> showTeacherReportExport();
                 case "staff-profile" -> showTeacherProfile();
+                case "staff-portfolios" -> showSharedPortfolios();
+                case "messages" -> showMessages();
+                case "community" -> showCommunity();
+                case "accounts" -> showAccountManagement();
                 default -> showHome();
             }
         } finally {
@@ -167,6 +223,10 @@ public class App extends Application {
         }
     }
 
+    public static void openWebLink(String address) {
+        try { String url = AppData.webLink(address); if (!url.isEmpty()) instance.getHostServices().showDocument(url); }
+        catch (Exception ex) { Ui.error(ex.getMessage()); }
+    }
     public static void openFile(Path path) {
         try {
             if (!Files.isRegularFile(path)) throw new IOException("The saved document could not be found.");

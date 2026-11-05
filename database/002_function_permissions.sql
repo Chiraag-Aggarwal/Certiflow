@@ -1,0 +1,10 @@
+begin;
+revoke all on function public.is_staff() from public, anon, authenticated;
+revoke all on function public.decide_request(uuid,text,text) from public, anon, authenticated;
+revoke all on function public.create_profile() from public, anon, authenticated;
+revoke all on function public.sync_profile_email() from public, anon, authenticated;
+revoke all on function public.claim_initial_admin() from public, anon, authenticated;
+revoke all on function public.prepare_request() from public, anon, authenticated;
+grant execute on function public.is_staff() to authenticated;
+grant execute on function public.decide_request(uuid,text,text) to authenticated;
+commit;

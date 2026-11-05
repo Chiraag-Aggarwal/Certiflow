@@ -22,7 +22,7 @@ public class TeacherDashboardView {
         requestsList.setId("request-card-grid");
         search.textProperty().addListener((observable, before, after) -> refresh());
         view = Ui.page("Student NOC requests", "Requests",
-                Ui.muted("Approve a request or explain why it needs to be rejected. Decisions are saved locally."),
+                Ui.muted("Approve a request or explain why it needs to be rejected. Decisions are shared with the student."),
                 search, count, requestsList);
         refresh();
     }
@@ -41,6 +41,8 @@ public class TeacherDashboardView {
     }
 
     private VBox requestCard(AppData.NocRequest request) {
+        AppData.User student = App.data().users().stream().filter(u -> u.id().equals(request.studentId())).findFirst().orElse(null);
+        String identity = student == null ? request.studentName() : student.name() + " · ID: " + student.displayId();
         TextField note = new TextField();
         note.setPromptText("Decision note (required to reject)");
         note.setId("decision-note-" + request.id());
@@ -51,9 +53,11 @@ public class TeacherDashboardView {
         reject.getStyleClass().add("danger-button");
         GridPane actions = Ui.grid(2, 110, approve, reject);
         return Ui.card(Ui.title(request.type()),
-                Ui.text(request.studentName() + " · " + request.studentId()),
+                Ui.text(identity),
+                Ui.muted(student != null && student.identityVerified() ? "Current identity checked by an administrator" : "Identity details are self-reported; check institutional records"),
+                Ui.muted(request.recipientId().isBlank() ? "Shared staff queue" : "Assigned to " + App.data().contactName(request.recipientId())),
                 Ui.muted(request.id() + " · Submitted " + Ui.date(request.submittedAt())),
-                Ui.text(request.reason()), note, actions);
+                Ui.text(request.reason()), Ui.messageContact("Message student", request.studentId()), note, actions);
     }
 
     private void decide(AppData.NocRequest request, AppData.Status status, TextField note) {
@@ -64,17 +68,17 @@ public class TeacherDashboardView {
         }
         String action = status == AppData.Status.APPROVED ? "Approve" : "Reject";
         if (!Ui.confirm(action + " " + request.id() + " for " + request.studentName() + "?")) return;
-        try {
-            App.data().decide(App.user(), request.id(), status, note.getText());
+        AppData.User actor = App.user();
+        String decisionNote = note.getText();
+        Background.run(view, () -> { App.data().decide(actor, request.id(), status, decisionNote); return true; }, ignored -> {
             refresh();
             Ui.toast(request.id() + (status == AppData.Status.APPROVED ? " approved." : " rejected.") + " The student can now see your decision.");
-        } catch (IOException | RuntimeException ex) {
-            Ui.error("The decision could not be saved. " + ex.getMessage());
-        }
+        }, ex -> Ui.error("The decision could not be saved. " + ex.getMessage()));
     }
 
     private static boolean matches(AppData.NocRequest request, String query) {
-        return (request.studentName() + " " + request.studentId() + " " + request.id()
+        String profile = App.data().users().stream().filter(u -> u.id().equals(request.studentId())).map(u -> u.name() + " " + u.studentNumber()).findFirst().orElse("");
+        return (profile + " " + request.studentName() + " " + request.studentId() + " " + request.id()
                 + " " + request.type() + " " + request.reason()).toLowerCase(Locale.ROOT).contains(query);
     }
 

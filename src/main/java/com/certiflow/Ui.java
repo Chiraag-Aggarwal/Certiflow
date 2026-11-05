@@ -11,6 +11,7 @@ import javafx.css.PseudoClass;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.Rectangle2D;
 import javafx.geometry.VPos;
 import javafx.scene.Node;
 import javafx.scene.control.Alert;
@@ -25,6 +26,7 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
 /** Width-driven layouts share the same controls and state at every breakpoint. */
@@ -59,14 +61,20 @@ public final class Ui {
         sidebar.setId("desktop-sidebar");
         sidebar.getStyleClass().add("app-sidebar");
         VBox desktopNavigation = new VBox(6);
+        desktopNavigation.setId("desktop-primary-navigation");
         VBox shortcuts = new VBox(6);
-        if (App.user().role() != AppData.Role.STUDENT) {
+        if (App.user().role().isStaff()) {
             Button students = nav("Students", active, App::showTeacherStudentList);
             students.setText("Student roster");
             Button reports = nav("Export", active, App::showTeacherReportExport);
             reports.setText("Reports");
-            shortcuts.getChildren().addAll(students, reports);
+            shortcuts.getChildren().addAll(nav("Portfolios", active, App::showSharedPortfolios), students, reports);
         }
+        if (App.user().role() != AppData.Role.VIEWER) {
+            shortcuts.getChildren().add(nav("Messages", active, App::showMessages));
+            shortcuts.getChildren().add(nav("Community", active, App::showCommunity));
+        }
+        if (App.user().role() == AppData.Role.ADMIN) shortcuts.getChildren().add(nav("Accounts", active, App::showAccountManagement));
         Label role = muted(roleName(App.user().role()) + " account");
         VBox accountCard = new VBox(6, text(App.user().name()), role);
         accountCard.getStyleClass().add("sidebar-account");
@@ -76,7 +84,7 @@ public final class Ui {
         closeDrawer.setId("navigation-close");
         Region brandSpace = new Region();
         HBox.setHgrow(brandSpace, Priority.ALWAYS);
-        HBox sidebarBrand = row(brand(), brandSpace, closeDrawer);
+        HBox sidebarBrand = row(brand("sidebar-logo"), brandSpace, closeDrawer);
         javafx.scene.control.TitledPane appearance = appearancePanel();
         VBox sidebarContent = new VBox(16, sidebarBrand, desktopNavigation, shortcuts, appearance, hint);
         sidebarContent.setMinWidth(0);
@@ -89,7 +97,10 @@ public final class Ui {
         VBox.setVgrow(sidebarScroll, Priority.ALWAYS);
         Button logout = secondary("Log out", App::logout);
         logout.setId("logout-button");
-        VBox footer = new VBox(12, accountCard, logout);
+        Button profile = nav("Profile", active, App::showOwnProfile);
+        profile.setAlignment(Pos.CENTER_LEFT);
+        VBox footer = new VBox(8, accountCard, profile, logout);
+        footer.setId("sidebar-footer");
         sidebar.getChildren().addAll(sidebarScroll, footer);
         appearance.expandedProperty().addListener((observable, before, after) -> {
             if (after) javafx.application.Platform.runLater(() -> sidebarScroll.setVvalue(1));
@@ -104,14 +115,26 @@ public final class Ui {
         HBox.setHgrow(headerSpace, Priority.ALWAYS);
         Label account = muted(App.user().name());
         account.getStyleClass().add("topbar-account");
-        HBox topbar = row(goBack, menu, brand(), headerSpace, account);
+        HBox topbar = row(menu, brand("header-logo"), headerSpace, account);
         topbar.setId("app-topbar");
         topbar.getStyleClass().add("app-topbar");
         topbar.setMinHeight(Region.USE_PREF_SIZE);
 
         Label pageTitle = title(heading);
         pageTitle.getStyleClass().add("page-title");
-        VBox pageHeading = new VBox(pageTitle);
+        goBack.setText("Back");
+        goBack.setMinWidth(84);
+        goBack.setPrefWidth(84);
+        goBack.setMaxWidth(84);
+        goBack.getStyleClass().add("page-back-button");
+        Button refreshData = secondary("Refresh", () -> {});
+        refreshData.setId("refresh-data");
+        refreshData.setOnAction(event -> App.refreshCurrent(root));
+        Region actionSpace = new Region();
+        HBox.setHgrow(actionSpace, Priority.ALWAYS);
+        HBox pageActions = row(goBack, actionSpace, refreshData);
+        pageActions.setId("page-actions");
+        VBox pageHeading = new VBox(12, pageActions, pageTitle);
         pageHeading.getStyleClass().add("page-heading");
         VBox body = new VBox(24, pageHeading);
         body.setId("page-content");
@@ -140,12 +163,13 @@ public final class Ui {
             navigation.add(nav("Home", active, App::showStudentDashboard));
             navigation.add(nav("Portfolios", active, App::showStudentPortfolio));
             navigation.add(nav("NOC", active, App::showStudentNoc));
-            navigation.add(nav("Profile", active, App::showStudentProfile));
+        } else if (App.user().role() == AppData.Role.VIEWER) {
+            navigation.add(nav("Discover", active, App::showViewerHome));
+            navigation.add(nav("Messages", active, App::showMessages));
         } else {
             navigation.add(nav("Home", active, App::showTeacherHome));
             navigation.add(nav("Requests", active, App::showTeacherDashboard));
             navigation.add(nav("History", active, App::showTeacherHistory));
-            navigation.add(nav("Profile", active, App::showTeacherProfile));
         }
         javafx.scene.layout.StackPane paper = new javafx.scene.layout.StackPane(new AcademicBackdrop(), scroll);
         paper.setMinSize(0, 0);
@@ -283,9 +307,11 @@ public final class Ui {
         return button;
     }
 
-    private static Node brand() {
-        Label mark = new Label("");
-        mark.setGraphic(Icons.of("graduate"));
+    private static Node brand(String logoId) {
+        Node artwork = logoMark(32);
+        artwork.setId(logoId);
+        StackPane mark = new StackPane(artwork);
+        mark.setMinSize(42, 42); mark.setPrefSize(42, 42); mark.setMaxSize(42, 42);
         mark.getStyleClass().add("app-brand-mark");
         Label name = new Label("Certiflow");
         name.getStyleClass().add("app-brand-name");
@@ -400,15 +426,60 @@ public final class Ui {
     }
 
     public static Node logo(double height) {
-        var resource = Ui.class.getResource("/logo.png");
-        if (resource == null) return title("Certiflow");
-        ImageView logo = new ImageView(new Image(resource.toExternalForm()));
+        return logoView(height * 1.25, height, BrandLogo.FULL);
+    }
+
+    static Node logoMark(double size) {
+        return logoView(size, size, BrandLogo.MARK);
+    }
+
+    private static Node logoView(double width, double height, Rectangle2D viewport) {
+        if (BrandLogo.IMAGE == null) return title("Certiflow");
+        ImageView logo = new ImageView(BrandLogo.IMAGE);
+        logo.setViewport(viewport);
         logo.setPreserveRatio(true);
+        logo.setFitWidth(width);
         logo.setFitHeight(height);
+        logo.setSmooth(true);
+        logo.setAccessibleText("Certiflow original logo");
+        logo.getStyleClass().add("certiflow-logo");
         return logo;
     }
+
+    /** Viewports trim transparent padding without changing the original artwork. */
+    private static final class BrandLogo {
+        private static final Image IMAGE = load();
+        private static final Rectangle2D FULL = bounds(1.0);
+        // The original symbol sits above the wordmark, in the top 64% of the source.
+        private static final Rectangle2D MARK = bounds(0.64);
+
+        private static Image load() {
+            var resource = Ui.class.getResource("/logo.png");
+            if (resource == null) return null;
+            Image image = new Image(resource.toExternalForm());
+            return image.isError() ? null : image;
+        }
+
+        private static Rectangle2D bounds(double heightFraction) {
+            if (IMAGE == null) return null;
+            int width = (int) IMAGE.getWidth(), height = (int) Math.ceil(IMAGE.getHeight() * heightFraction);
+            int left = width, top = height, right = -1, bottom = -1;
+            var pixels = IMAGE.getPixelReader();
+            if (pixels == null) return new Rectangle2D(0, 0, width, height);
+            for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
+                if ((pixels.getArgb(x, y) >>> 24) > 8) {
+                    left = Math.min(left, x); top = Math.min(top, y);
+                    right = Math.max(right, x); bottom = Math.max(bottom, y);
+                }
+            }
+            if (right < left) return new Rectangle2D(0, 0, width, height);
+            left = Math.max(0, left - 2); top = Math.max(0, top - 2);
+            right = Math.min(width - 1, right + 2); bottom = Math.min(height - 1, bottom + 2);
+            return new Rectangle2D(left, top, right - left + 1, bottom - top + 1);
+        }
+    }
     public static String roleName(AppData.Role role) {
-        return switch (role) { case STUDENT -> "Student"; case TEACHER -> "Teacher"; case ADMIN -> "Admin"; };
+        return switch (role) { case STUDENT -> "Student"; case VIEWER -> "Recruiter / Viewer"; case TEACHER -> "Teacher"; case ADMIN -> "Admin"; };
     }
     public static Label title(String value) {
         Label label = text(value);
@@ -441,6 +512,11 @@ public final class Ui {
     public static Button secondary(String label, Runnable action) {
         Button button = button(label, action);
         button.getStyleClass().add("app-secondary");
+        return button;
+    }
+    public static Button messageContact(String label, String contactId) {
+        Button button = secondary(label, () -> App.showMessages(contactId));
+        button.setDisable(App.data().contacts().stream().noneMatch(c -> c.id().equals(contactId)));
         return button;
     }
     public static VBox card(Node... children) {

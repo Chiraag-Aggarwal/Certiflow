@@ -1,6 +1,5 @@
 package com.certiflow;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 import javafx.scene.control.Button;
@@ -32,27 +31,32 @@ public class StudentNocView {
         reason.setWrapText(true);
         reason.setPrefRowCount(3);
         reason.setAccessibleText("Reason for the NOC application");
+        RecipientPicker recipient = new RecipientPicker("noc", "Any available staff member",
+                "Leave unassigned for the shared staff queue, or choose one teacher. Assigned applications are visible to that teacher and administrators.");
 
         Label feedback = Ui.text("");
         feedback.setId("noc-feedback");
         feedback.setVisible(false);
         feedback.setManaged(false);
-        Button submit = Ui.button("Submit application", () -> {
-            try {
-                AppData.NocRequest request = App.data().submit(App.user(), type.getValue(), reason.getText());
+        Button submit = Ui.button("Submit application", () -> {});
+        submit.setOnAction(event -> {
+            String selectedType = type.getValue(), enteredReason = reason.getText(), recipientId = recipient.recipientId();
+            AppData.User actor = App.user();
+            Ui.feedback(feedback,"Submitting…",true);
+            Background.run(submit.getParent(), () -> App.data().submit(actor,selectedType,enteredReason,recipientId), request -> {
                 type.getSelectionModel().clearSelection();
                 reason.clear();
+                recipient.select("");
                 search.clear();
                 statusFilter.setValue("All statuses");
                 refresh();
-                Ui.feedback(feedback, "Application " + request.id() + " submitted. Your teacher can now review it.", true);
-            } catch (IOException | IllegalArgumentException | IllegalStateException exception) {
-                Ui.feedback(feedback, exception.getMessage(), false);
-            }
+                Ui.feedback(feedback, "Application submitted " + (request.recipientId() == null || request.recipientId().isBlank()
+                    ? "to the shared staff queue." : "to " + App.data().contactName(request.recipientId()) + "."), true);
+            }, exception -> Ui.feedback(feedback, exception.getMessage(), false));
         });
         submit.setId("noc-submit");
         VBox form = Ui.card(Ui.section("New application", "Select a type and enter a reason. One pending application per type is allowed."),
-                Ui.text("Application type"), type, Ui.text("Reason"), reason, submit, feedback);
+                Ui.text("Application type"), type, Ui.text("Reason"), reason, recipient, submit, feedback);
         form.setId("noc-form-panel");
 
         search.setId("noc-search");
@@ -89,13 +93,16 @@ public class StudentNocView {
     }
 
     static boolean matches(AppData.NocRequest request, String query) {
-        return (request.id() + " " + request.type() + " " + request.reason() + " " + request.status().name())
+        return (request.id() + " " + request.type() + " " + request.reason() + " " + request.status().name()
+                + " " + App.data().contactName(request.recipientId()))
                 .toLowerCase(Locale.ROOT).contains(query);
     }
 
     static VBox requestCard(AppData.NocRequest request) {
         VBox card = Ui.card(Ui.text(request.type()), Ui.status(request.status()),
                 Ui.muted(request.id() + " • Submitted " + Ui.date(request.submittedAt())),
+                Ui.muted(request.recipientId() == null || request.recipientId().isBlank() ? "Shared staff queue"
+                    : "Assigned to " + App.data().contactName(request.recipientId())),
                 Ui.text(request.reason()));
         if (request.decidedAt() != null) {
             card.getChildren().add(Ui.muted("Decided " + Ui.date(request.decidedAt())));
@@ -103,6 +110,9 @@ public class StudentNocView {
         if (request.decisionNote() != null && !request.decisionNote().isBlank()) {
             card.getChildren().add(Ui.text("Teacher's note: " + request.decisionNote()));
         }
+        if (request.recipientId() != null && !request.recipientId().isBlank())
+            card.getChildren().add(Ui.messageContact("Message assigned staff", request.recipientId()));
+        if (request.studentId().equals(App.user().id())) card.getChildren().add(SharingControls.forRequest(request));
         return card;
     }
 

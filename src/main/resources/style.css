@@ -1,5 +1,9 @@
 /* Warm, selectable palettes on a custom academic-paper background. */
-.root {
+.message-bubble { -fx-background-color: -cf-soft; -fx-background-radius: 16px; -fx-padding: 14px 18px; -fx-border-color: -cf-border; -fx-border-radius: 16px; }
+.message-outgoing { -fx-background-color: -cf-tint; -fx-border-color: transparent; }
+.profile-progress .bar { -fx-background-color: -cf-accent; -fx-background-radius: 6px; }
+.profile-progress .track { -fx-background-color: -cf-soft; -fx-background-radius: 6px; }
+.root, .dialog-pane {
     -fx-font-family: "Segoe UI"; -fx-font-size: 14px;
     -cf-bg: #f6f5ef; -cf-surface: #fffef9; -cf-soft: #f1f3eb;
     -cf-text: #2c3932; -cf-muted: #657168; -cf-border: #dedfd4;
@@ -108,10 +112,10 @@
 .sidebar-edge { -fx-background-color: -cf-tint; -fx-background-radius: 0 8px 8px 0; -fx-cursor: hand; }
 .sidebar-edge:hover { -fx-background-color: -cf-accent; }
 .app-brand-mark {
-    -fx-background-color: -cf-tint; -fx-background-radius: 11px;
-    -fx-min-width: 38px; -fx-min-height: 38px; -fx-alignment: center;
+    -fx-background-color: #fffdf6; -fx-background-radius: 11px;
+    -fx-border-color: #e8dfc9; -fx-border-radius: 11px;
+    -fx-alignment: center;
 }
-.app-brand-mark .line-icon { -fx-stroke: -cf-accent; }
 .app-brand-name { -fx-text-fill: -cf-text; -fx-font-size: 22px; -fx-font-weight: bold; }
 .app-sidebar .app-brand-name { -fx-text-fill: -cf-text; }
 .app-topbar { -fx-background-color: -cf-surface; -fx-border-color: -cf-border; -fx-border-width: 0 0 1px 0; }
@@ -181,6 +185,8 @@
 .app-text.feedback-success, .app-text.feedback-error { -fx-padding: 12px 14px; -fx-background-radius: 9px; -fx-font-size: 13px; }
 .app-text.feedback-success { -fx-text-fill: -cf-good; -fx-background-color: -cf-good-bg; }
 .app-text.feedback-error { -fx-text-fill: -cf-bad; -fx-background-color: -cf-bad-bg; }
+.auth-error.feedback-success { -fx-text-fill: -cf-good; }
+.auth-error.feedback-error { -fx-text-fill: -cf-bad; }
 .toast-notice { -fx-background-color: -cf-surface; -fx-border-color: -cf-teal; -fx-border-radius: 12px; -fx-background-radius: 12px; -fx-padding: 12px 14px; -fx-effect: dropshadow(gaussian, rgba(24,43,76,0.18), 24, 0, 0, 5); }
 .toast-notice .app-text { -fx-text-fill: -cf-good; }
 .app-page:compact .app-text { -fx-font-size: 13px; }
@@ -192,7 +198,6 @@
 .app-page:compact .app-heading.page-title { -fx-font-size: 27px; }
 .app-page:compact .app-statistic .stat-number { -fx-font-size: 30px; }
 .app-page:compact .app-brand-name { -fx-font-size: 19px; }
-.app-page:compact .app-brand-mark { -fx-min-width: 32px; -fx-min-height: 32px; }
 
 
 .welcome-banner { -fx-background-color: -cf-tint; -fx-background-radius: 16px; -fx-border-color: -cf-border; -fx-border-radius: 16px; -fx-padding: 12px 24px; }
@@ -218,3 +223,4 @@
 .swatch-teal { -fx-background-color: #d9eee7; -fx-text-fill: #24695e; }
 .sticker-paper { -fx-fill: -cf-tint; -fx-stroke: -cf-accent; -fx-stroke-width: 1.3; }
 .sticker-ink { -fx-fill: transparent; -fx-stroke: -cf-accent; -fx-stroke-width: 2.6; -fx-stroke-line-cap: round; }
+.page-back-button { -fx-background-color: transparent; -fx-padding: 8px 12px; -fx-font-size: 12px; }

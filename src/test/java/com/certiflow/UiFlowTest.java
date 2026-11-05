@@ -1,836 +1,449 @@
 package com.certiflow;
 
 import static org.junit.jupiter.api.Assertions.*;
-
-import java.lang.reflect.Field;
-import java.awt.image.BufferedImage;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
+import java.nio.file.*;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.FutureTask;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
+import java.util.function.BooleanSupplier;
 import javafx.application.Platform;
-import javafx.geometry.Bounds;
-import javafx.geometry.Rectangle2D;
-import javafx.scene.Node;
-import javafx.scene.Parent;
-import javafx.scene.Scene;
-import javafx.scene.SnapshotParameters;
-import javafx.scene.control.Button;
-import javafx.scene.control.ComboBox;
-import javafx.scene.control.Label;
-import javafx.scene.control.PasswordField;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TextField;
-import javafx.scene.image.WritableImage;
-import javafx.scene.layout.Region;
-import javafx.scene.layout.VBox;
+import javafx.scene.*;
+import javafx.scene.control.*;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.*;
 import javafx.stage.Stage;
-import javax.imageio.ImageIO;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 
-/** Real JavaFX controls and routes, without showing windows or injecting desktop input. */
 class UiFlowTest {
-    @TempDir Path temporary;
-    private Stage stage;
-    private AppData data;
-    private double viewportWidth = 640;
-    private double viewportHeight = 560;
-
-    @BeforeAll
-    static void startToolkit() throws Exception {
-        System.setProperty("prism.order", "sw");
-        CountDownLatch started = new CountDownLatch(1);
-        Platform.startup(() -> {
-            Platform.setImplicitExit(false);
-            started.countDown();
-        });
-        assertTrue(started.await(15, TimeUnit.SECONDS), "JavaFX toolkit did not start");
+    @TempDir Path directory;
+    TestBackend backend; AppData data; Stage stage;
+    @BeforeAll static void toolkit() throws Exception {
+        System.setProperty("prism.order","sw"); CountDownLatch started=new CountDownLatch(1);
+        Platform.startup(()->{Platform.setImplicitExit(false);started.countDown();}); assertTrue(started.await(15,TimeUnit.SECONDS));
     }
-
-    @BeforeEach
-    void setUp() throws Exception {
-        data = new AppData(temporary.resolve("data"));
-        onFx(() -> {
-            UiSettings.load(data.dataDirectory());
-            stage = new Stage();
-            Scene scene = new Scene(new VBox(), 640, 560);
-            scene.getStylesheets().add(App.class.getResource("/style.css").toExternalForm());
-            var authStyles = App.class.getResource("/auth.css");
-            if (authStyles != null) scene.getStylesheets().add(authStyles.toExternalForm());
-            stage.setScene(scene);
-            setAppField("primaryStage", stage);
-            setAppField("data", data);
-            setAppField("currentUser", null);
-            App.showOptionView();
-            assertFalse(stage.isShowing(), "Integration tests must never display a desktop window");
-            return null;
-        });
+    @BeforeEach void setup() throws Exception {
+        backend=new TestBackend(); data=new AppData(directory,backend.client());
+        fx(()->{ UiSettings.load(directory); stage=new Stage(); Scene scene=new Scene(new VBox(),1200,800);
+            scene.getStylesheets().add(App.class.getResource("/style.css").toExternalForm()); scene.getStylesheets().add(App.class.getResource("/auth.css").toExternalForm());
+            scene.getStylesheets().add(App.class.getResource("/chat.css").toExternalForm());
+            stage.setScene(scene); field("primaryStage",stage); field("data",data); field("currentUser",null); App.showOptionView(); return null; });
     }
-
-    @AfterEach
-    void tearDown() throws Exception {
-        onFx(() -> {
-            if (stage != null) {
-                assertFalse(stage.isShowing(), "A test unexpectedly displayed its window");
-                stage.close();
-                stage.setScene(null);
-            }
-            setAppField("currentUser", null);
-            setAppField("primaryStage", null);
-            setAppField("data", null);
-            return null;
-        });
+    @AfterEach void cleanup() throws Exception {
+        fx(()->{assertFalse(stage.isShowing());stage.setScene(null);return null;});
+        CountDownLatch idle=new CountDownLatch(1); Background.execute(idle::countDown); assertTrue(idle.await(10,TimeUnit.SECONDS));
+        fx(()->{stage.close();field("primaryStage",null);field("currentUser",null);field("data",null);return null;}); backend.close();
     }
-
-    @AfterAll
-    static void stopToolkit() {
-        Platform.exit();
+    @AfterAll static void shutdown() { Platform.exit(); }
+    @Test void emailLoginUsesBackgroundRequestAndDisplaysOnlyServerIdentity() throws Exception {
+        fx(()->{assertNull(stage.getScene().lookup("#role-student"));assertNull(stage.getScene().lookup("#role-admin"));button("login-submit").fire(); assertTrue(label("login-error").isVisible());
+            control("login-email",TextField.class).setText("account0@example.invalid");control("login-password",PasswordField.class).setText("long-password-test");button("login-submit").fire();return null;});
+        await(()->stage.getScene().lookup("#page-content")!=null);
+        fx(()->{assertEquals("account0@example.invalid",App.user().email());assertTrue(data.requests().isEmpty());assertNoDemoText(stage.getScene().getRoot());return null;});
     }
-
-    @Test
-    void loginRejectsEmptyInvalidAndWrongRoleCredentialsBeforeEnteringStudentHome() throws Exception {
-        onFx(() -> {
-            button("role-student").fire();
-            button("login-submit").fire();
-            assertTrue(control("login-error", Label.class).isVisible());
-            assertEquals("Enter both a username and password.", control("login-error", Label.class).getText());
-            assertThrows(IllegalStateException.class, App::user);
-
-            control("login-username", TextField.class).setText("student");
-            control("login-password", PasswordField.class).setText("wrong");
-            button("login-submit").fire();
-            assertTrue(control("login-error", Label.class).getText().startsWith("Incorrect username"));
-            assertThrows(IllegalStateException.class, App::user);
-
-            control("login-username", TextField.class).setText("teacher");
-            control("login-password", PasswordField.class).setText("teacher123");
-            button("login-submit").fire();
-            assertThrows(IllegalStateException.class, App::user, "Teacher credentials must not enter a student session");
-
-            control("login-username", TextField.class).setText("student");
-            control("login-password", PasswordField.class).setText("student123");
-            button("login-submit").fire();
-            assertEquals(AppData.Role.STUDENT, App.user().role());
-            assertHasLabel("Student Home");
-            assertNotNull(button("nav-noc"));
-            return null;
-        });
-    }
-
-    @Test
-    void studentSubmitsThroughRealControlsAndCanSearchNavigateAndLogOut() throws Exception {
-        onFx(() -> {
-            login("student");
-            int previous = data.requestsFor(App.user().id()).size();
-            button("nav-noc").fire();
-            combo("noc-type").setValue("Internship");
-            control("noc-reason", TextArea.class).setText("Summer placement certificate for the university internship.");
-            button("noc-submit").fire();
-
-            List<AppData.NocRequest> requests = data.requestsFor(App.user().id());
-            assertEquals(previous + 1, requests.size());
-            AppData.NocRequest added = requests.stream().filter(r -> r.type().equals("Internship")).findFirst().orElseThrow();
-            assertEquals(AppData.Status.PENDING, added.status());
-            assertTrue(control("noc-feedback", Label.class).isVisible());
-            assertTrue(control("noc-feedback", Label.class).getText().contains(added.id()));
-            assertTrue(control("noc-reason", TextArea.class).getText().isEmpty());
-            assertNull(combo("noc-type").getValue());
-
-            control("noc-search", TextField.class).setText(added.id().toLowerCase());
-            assertHasLabel("1 application");
-            assertHasLabel("Internship");
-            combo("noc-status-filter").setValue("Rejected");
-            assertHasLabel("0 applications");
-            combo("noc-status-filter").setValue("Pending");
-            assertHasLabel("1 application");
-
-            button("nav-portfolios").fire();
-            assertHasLabel("My Portfolios");
-            assertNotNull(control("portfolio-title", TextField.class));
-            button("nav-profile").fire();
-            assertHasLabel("Sarah Jenkins");
-            assertHasLabel("Username: student");
-            button("nav-home").fire();
-            assertHasLabel("Student Home");
-            textButton("Log out").fire();
-            assertThrows(IllegalStateException.class, App::user);
-            assertNotNull(button("role-student"));
-            assertFalse(stage.isShowing());
-            return null;
-        });
-        assertTrue(new AppData(data.dataDirectory()).requestsFor("STU001").stream()
-                .anyMatch(request -> request.type().equals("Internship")), "Submitted view data must survive reopening");
-    }
-
-    @Test
-    void teacherSearchAndHistoryAgreeWithDecisionAndStudentStatusAfterReload() throws Exception {
-        onFx(() -> {
-            login("teacher");
-            button("nav-requests").fire();
-            assertHasLabel("Showing 3 of 3 pending requests");
-            control("request-search", TextField.class).setText("sArAh");
-            assertHasLabel("Showing 1 of 3 pending requests");
-            control("request-search", TextField.class).setText("not-a-student");
-            assertHasLabel("Showing 0 of 3 pending requests");
-
-            AppData.NocRequest request = data.requestsFor("STU001").get(0);
-            control("request-search", TextField.class).setText(request.id());
-            assertHasLabel("Showing 1 of 3 pending requests");
-            assertNotNull(button("approve-" + request.id()));
-            assertNotNull(button("reject-" + request.id()));
-            // Model decision avoids the desktop confirmation dialog while testing its resulting views.
-            data.decide(App.user(), request.id(), AppData.Status.APPROVED, "All requirements verified.");
-            App.showTeacherDashboard();
-            assertHasLabel("Showing 2 of 2 pending requests");
-            button("nav-history").fire();
-            assertHasLabel("Showing 1 of 1 decisions");
-            assertHasLabel("APPROVED");
-            assertHasLabel("Decision note: All requirements verified.");
-            combo("history-filter").setValue("Rejected");
-            assertHasLabel("Showing 0 of 1 decisions");
-            combo("history-filter").setValue("Approved");
-            control("history-search", TextField.class).setText(request.id().toLowerCase());
-            assertHasLabel("Showing 1 of 1 decisions");
-
-            App.logout();
-            data = new AppData(data.dataDirectory());
-            setAppField("data", data);
-            login("student");
-            assertHasLabel("APPROVED");
-            assertHasLabel("Teacher's note: All requirements verified.");
-            button("nav-noc").fire();
-            combo("noc-status-filter").setValue("Approved");
-            assertHasLabel("1 application");
-            assertHasLabel("APPROVED");
-            return null;
-        });
-    }
-
-    @Test
-    void adminLoginHasWorkingStaffLandingAndNavigation() throws Exception {
-        onFx(() -> {
-            login("admin");
-            assertEquals(AppData.Role.ADMIN, App.user().role());
-            assertHasLabel("Admin overview");
-            button("nav-requests").fire();
-            assertHasLabel("Showing 3 of 3 pending requests");
-            button("nav-history").fire();
-            assertHasLabel("Showing 0 of 0 decisions");
-            button("nav-profile").fire();
-            assertHasLabel("Local Administrator");
-            assertHasLabel("Username: admin");
-            textButton("Log out").fire();
-            assertNotNull(button("role-admin"));
-            return null;
-        });
-    }
-
-    @Test
-    void navigationStaysWithinMinimumSceneAndScrollableBodyOnEveryDashboardRoute() throws Exception {
-        onFx(() -> {
-            login("student");
-            for (Runnable route : List.<Runnable>of(App::showStudentDashboard, App::showStudentNoc,
-                    App::showStudentPortfolio, App::showStudentProfile)) {
-                route.run();
-                assertNavigationFits("home", "portfolios", "noc", "profile");
-            }
-            App.logout();
-            login("teacher");
-            for (Runnable route : List.<Runnable>of(App::showTeacherHome, App::showTeacherDashboard,
-                    App::showTeacherHistory, App::showTeacherStudentList, App::showTeacherReportExport,
-                    App::showTeacherProfile)) {
-                route.run();
-                assertNavigationFits("home", "requests", "history", "profile");
-            }
-            assertFalse(stage.isShowing());
-            return null;
-        });
-    }
-
-    @Test
-    void dashboardsAdaptAcrossPhoneTabletLandscapeAndLaptopViewports() throws Exception {
-        onFx(() -> {
-            double[][] sizes = {{320, 640}, {360, 800}, {390, 844}, {768, 1024},
-                    {844, 390}, {960, 540}, {1366, 600}, {1366, 768}, {1440, 900}};
-            String[] studentNames = {"student-home", "student-noc", "student-portfolio", "student-profile"};
-            List<Runnable> studentRoutes = List.of(App::showStudentDashboard, App::showStudentNoc,
-                    App::showStudentPortfolio, App::showStudentProfile);
-            String[] staffNames = {"teacher-home", "teacher-requests", "teacher-history", "teacher-students",
-                    "teacher-report", "teacher-profile"};
-            List<Runnable> staffRoutes = List.of(App::showTeacherHome, App::showTeacherDashboard,
-                    App::showTeacherHistory, App::showTeacherStudentList, App::showTeacherReportExport,
-                    App::showTeacherProfile);
-            for (double[] size : sizes) {
-                resize(size[0], size[1]);
-                assertTrue(App.login(AppData.Role.STUDENT, "student", "student123"));
-                for (int i = 0; i < studentRoutes.size(); i++) {
-                    studentRoutes.get(i).run();
-                    assertResponsiveDashboard(studentNames[i], "home", "portfolios", "noc", "profile");
-                    captureRepresentative(studentNames[i]);
+    @Test void oneLoginRoutesEachAccountUsingOnlyTheServerRole() throws Exception {
+        backend.authMetadata.addProperty("role","ADMIN");
+        for(var role:AppData.Role.values()){
+            backend.role=role;
+            fx(()->{App.showLoginView("Admin","");assertNull(stage.getScene().lookup("#role-student"));assertNull(stage.getScene().lookup("#role-admin"));
+                control("login-email",TextField.class).setText("account0@example.invalid");control("login-password",PasswordField.class).setText("long-password-test");button("login-submit").fire();return null;});
+            await(()->stage.getScene().lookup("#page-content")!=null);
+            fx(()->{
+                assertEquals(role,App.user().role());String expected=role==AppData.Role.STUDENT?"student-home":role==AppData.Role.VIEWER?"viewer-home":"staff-home";
+                var route=App.class.getDeclaredField("currentRoute");route.setAccessible(true);assertEquals(expected,route.get(null));
+                if(role==AppData.Role.VIEWER){
+                    assertNotNull(stage.getScene().lookup("#community-search"));
+                    for(String privateAction:List.of("NOC","Requests","History","Students","Accounts","Portfolios"))assertFalse(containsText(stage.getScene().getRoot(),privateAction),privateAction);
+                    assertNull(stage.getScene().lookup("#noc-submit"));
                 }
-                App.logout();
-                assertTrue(App.login(AppData.Role.TEACHER, "teacher", "teacher123"));
-                for (int i = 0; i < staffRoutes.size(); i++) {
-                    staffRoutes.get(i).run();
-                    assertResponsiveDashboard(staffNames[i], "home", "requests", "history", "profile");
-                    captureRepresentative(staffNames[i]);
+                return null;
+            });
+        }
+    }
+    @Test void registrationWithoutInstitutionIdOpensVerificationAndAcceptsEmailCode() throws Exception {
+        fx(()->{
+            App.showAccountView("register","Student");
+            control("account-email",TextField.class).setText("  person@example.invalid  ");
+            control("account-name",TextField.class).setText("Real Name");
+            control("account-department",TextField.class).setText("Science");
+            assertEquals("",control("account-number",TextField.class).getText());
+            control("account-password",PasswordField.class).setText("long-password-test");
+            control("account-confirm",PasswordField.class).setText("long-password-test");
+            button("account-submit").fire();return null;
+        });
+        await(()->stage.getScene().lookup("#account-code")!=null);
+        fx(()->{
+            assertTrue(control("account-code",TextField.class).isVisible());
+            assertEquals("person@example.invalid",control("account-email",TextField.class).getText());
+            assertTrue(backend.calls.contains("POST /auth/v1/signup"));
+            assertEquals("",backend.lastBody.getAsJsonObject("data").get("student_number").getAsString());
+            button("account-send-code").fire();return null;
+        });
+        await(()->label("account-feedback").getText().contains("a code will arrive"));
+        fx(()->{
+            assertTrue(backend.calls.contains("POST /auth/v1/resend"));
+            assertEquals("person@example.invalid",backend.lastBody.get("email").getAsString());
+            assertEquals("signup",backend.lastBody.get("type").getAsString());
+            control("account-code",TextField.class).setText("123456");button("account-submit").fire();return null;
+        });
+        await(()->label("account-feedback").getText().contains("Email verified"));
+        fx(()->{
+            assertTrue(backend.calls.contains("POST /auth/v1/verify"));
+            assertEquals("person@example.invalid",backend.lastBody.get("email").getAsString());
+            assertEquals("123456",backend.lastBody.get("token").getAsString());
+            assertEquals("signup",backend.lastBody.get("type").getAsString());
+            assertEquals("",control("account-code",TextField.class).getText());assertNull(data.currentUser());return null;
+        });
+    }
+    @Test void verificationLinksPreserveTypedEmailFromRegistrationAndLogin() throws Exception {
+        for(String source:List.of("register","login")) fx(()->{
+            if(source.equals("register")) App.showAccountView("register","Student"); else App.showLoginView("Student","");
+            control(source.equals("register")?"account-email":"login-email",TextField.class).setText("  person@example.invalid  ");
+            control("open-verification",Hyperlink.class).fire();
+            assertTrue(control("account-code",TextField.class).isVisible());
+            assertEquals("person@example.invalid",control("account-email",TextField.class).getText());return null;
+        });
+        assertTrue(backend.calls.isEmpty());
+    }
+    @Test void registrationOffersOnlyStudentAndViewerAndViewerNeedsNoInstitutionId() throws Exception {
+        fx(()->{
+            App.showAccountView("register","Student");ComboBox<AppData.Role> roles=control("account-role",ComboBox.class);
+            assertEquals(List.of(AppData.Role.STUDENT,AppData.Role.VIEWER),roles.getItems());assertEquals(AppData.Role.STUDENT,roles.getValue());
+            roles.setValue(AppData.Role.ADMIN);button("account-submit").fire();assertTrue(label("account-feedback").getText().contains("Choose Student"));assertTrue(backend.calls.isEmpty());
+            control("account-number",TextField.class).setText("SHOULD-NOT-BE-SENT");roles.setValue(AppData.Role.VIEWER);
+            control("account-email",TextField.class).setText("viewer@example.invalid");control("account-name",TextField.class).setText("Recruiting Person");
+            control("account-department",TextField.class).setText("");control("account-password",PasswordField.class).setText("long-password-test");control("account-confirm",PasswordField.class).setText("long-password-test");
+            button("account-submit").fire();return null;
+        });
+        await(()->stage.getScene().lookup("#account-code")!=null);
+        fx(()->{
+            var metadata=backend.lastBody.getAsJsonObject("data");assertEquals("VIEWER",metadata.get("account_type").getAsString());
+            assertEquals("",metadata.get("student_number").getAsString());assertFalse(metadata.has("role"));assertFalse(metadata.has("is_admin"));
+            assertEquals("viewer@example.invalid",control("account-email",TextField.class).getText());assertNull(data.currentUser());
+            control("account-back-to-login",Hyperlink.class).fire();assertEquals("viewer@example.invalid",control("login-email",TextField.class).getText());
+            assertNull(stage.getScene().lookup("#role-admin"));return null;
+        });
+    }
+    @Test void backButtonIsBelowMenuAndHistoryWorksForAllRolesAndSizes() throws Exception {
+        for(var role:AppData.Role.values()) {
+            backend.role=role; var user=data.authenticate("account0@example.invalid","long-password-test").orElseThrow();
+            fx(()->{App.completeLogin(user);return null;});
+            for(double width:new double[]{320,390,768,1366}) fx(()->{
+                resize(width,width<500?844:800);
+                Node back=button("return-button"),menu=button("navigation-toggle");
+                assertTrue(back.localToScene(back.getBoundsInLocal()).getMinY()>menu.localToScene(menu.getBoundsInLocal()).getMaxY(),"Back must be below the menu");
+                assertTrue(back.isDisabled());assertHorizontalFit(stage.getScene().getRoot(),width);return null;
+            });
+            fx(()->{if(role==AppData.Role.STUDENT)App.showStudentNoc();else if(role==AppData.Role.VIEWER)App.showViewerProfile();else App.showTeacherDashboard();assertFalse(button("return-button").isDisabled());button("return-button").fire();assertTrue(button("return-button").isDisabled());return null;});
+        }
+    }
+    @Test void allAccountFormsFitNarrowAndWideScreensWithoutDemoCredentials() throws Exception {
+        for(String mode:List.of("register","verify","recover")) for(double width:new double[]{320,390,1280}) fx(()->{
+            App.showAccountView(mode,"Student");resize(width,844);assertHorizontalFit(stage.getScene().getRoot(),width);
+            assertNotNull(control("account-email",TextField.class));assertNoDemoText(stage.getScene().getRoot());return null;
+        });
+    }
+    @Test void submittingApplicationPersistsThroughTheHttpClient() throws Exception {
+        var user=data.authenticate(AppData.Role.STUDENT,"account0@example.invalid","long-password-test").orElseThrow();
+        fx(()->{App.completeLogin(user);App.showStudentNoc();control("noc-type",ComboBox.class).setValue("Internship");control("noc-reason",TextArea.class).setText("Internship approval request");button("noc-submit").fire();return null;});
+        await(()->label("noc-feedback").getText().contains("submitted"));
+        fx(()->{assertEquals(1,data.requests().size());assertEquals("",control("noc-reason",TextArea.class).getText());return null;});
+    }
+    @Test void savedProfileUsesRealEmailAndUpdatesName() throws Exception {
+        var user=data.authenticate(AppData.Role.STUDENT,"account0@example.invalid","long-password-test").orElseThrow();
+        fx(()->{App.completeLogin(user);App.showStudentProfile();control("profile-name",TextField.class).setText("Updated Account Name");button("profile-save").fire();return null;});
+        await(()->label("profile-feedback").getText().equals("Profile updated."));
+        fx(()->{assertEquals("Updated Account Name",App.user().name());assertEquals("account0@example.invalid",App.user().email());return null;});
+    }
+    @Test void expandedProfileFieldsPersistForEveryRoleWithoutSubmittingProtectedFields() throws Exception {
+        for (AppData.Role role : AppData.Role.values()) {
+            backend.role=role; backend.profileChanges.addProperty("identity_verified",true);
+            var user=data.authenticate("account0@example.invalid","long-password-test").orElseThrow();
+            fx(()->{
+                App.completeLogin(user); if(role==AppData.Role.STUDENT)App.showStudentProfile();else if(role==AppData.Role.VIEWER)App.showViewerProfile();else App.showTeacherProfile();
+                assertTrue(label("profile-verification").getText().contains("checked"));
+                control("profile-name",TextField.class).setText("Updated Person");
+                control("profile-department",TextField.class).setText("Engineering");
+                control("profile-number",TextField.class).setText("ID-42");
+                control("profile-programme",TextField.class).setText("Computer Science");
+                control("profile-bio",TextArea.class).setText("Researching accessible academic software.");
+                control("profile-skills",TextField.class).setText("Java, research");
+                control("profile-website",TextField.class).setText("https://example.invalid/profile");
+                button("profile-save").fire();return null;
+            });
+            await(()->label("profile-feedback").getText().equals("Profile updated."));
+            fx(()->{
+                assertEquals("Updated Person",App.user().name());assertEquals("Engineering",App.user().department());
+                assertEquals("ID-42",App.user().studentNumber());assertEquals("Computer Science",App.user().programme());
+                assertEquals("Researching accessible academic software.",App.user().bio());
+                assertEquals("Java, research",App.user().skills());assertEquals("https://example.invalid/profile",App.user().website());
+                assertEquals(role,App.user().role());assertEquals("account0@example.invalid",App.user().email());
+                assertFalse(App.user().identityVerified());assertTrue(label("profile-verification").getText().contains("self-reported"));
+                assertEquals(7,backend.lastBody.size());
+                for(String protectedField:List.of("role","email","identity_verified","verified_by","verified_at"))assertFalse(backend.lastBody.has(protectedField));
+                return null;
+            });
+        }
+    }
+    @Test void collaborationPagesFitPhoneTabletAndLaptopWidths() throws Exception {
+        for(AppData.Role role:AppData.Role.values()) {
+            backend.role=role;var user=data.authenticate("account0@example.invalid","long-password-test").orElseThrow();
+            fx(()->{App.completeLogin(user);return null;});
+            var pages=new java.util.ArrayList<PageCase>();
+            if(role==AppData.Role.STUDENT) {
+                pages.add(new PageCase("portfolio",App::showStudentPortfolio));pages.add(new PageCase("noc",App::showStudentNoc));
+                pages.add(new PageCase("profile",App::showStudentProfile));
+            } else if(role==AppData.Role.VIEWER) {
+                pages.add(new PageCase("discover",App::showViewerHome));pages.add(new PageCase("profile",App::showViewerProfile));
+            } else {
+                pages.add(new PageCase("shared-portfolios",App::showSharedPortfolios));pages.add(new PageCase("profile",App::showTeacherProfile));
+                if(role==AppData.Role.ADMIN)pages.add(new PageCase("accounts",App::showAccountManagement));
+            }
+            pages.add(new PageCase("messages",App::showMessages));
+            for(PageCase page:pages) fx(()->{
+                page.open().run();
+                for(int width:new int[]{320,390,768,1366}) {
+                    resize(width,844);assertHorizontalFit(stage.getScene().getRoot(),width);assertNoDemoText(stage.getScene().getRoot());
+                    if(width==390||width==1366)capture(role.name().toLowerCase()+"-"+page.name()+"-"+width);
                 }
-                App.logout();
-            }
-            return null;
-        });
+                App.showHome();return null;
+            });
+        }
     }
-
-    @Test
-    void roleSelectionAndLoginFormsFitPhoneAndLaptopWithoutHorizontalClipping() throws Exception {
-        onFx(() -> {
-            for (double[] size : new double[][] {{320, 568}, {320, 640}, {390, 844}, {844, 390}, {1366, 768}, {1440, 900}}) {
-                resize(size[0], size[1]);
-                App.showOptionView();
-                assertHorizontalFit("role picker");
-                for (String role : List.of("student", "teacher", "admin")) assertTouchTarget(button("role-" + role));
-                for (Node node : descendants(root())) {
-                    if (node instanceof Label label && label.getStyleClass().contains("auth-role-description")) {
-                        assertTrue(label.getHeight() >= label.prefHeight(label.getWidth()) - 1,
-                                "Role description should wrap without clipping: " + label.getText());
-                    }
+    @Test void onlyFoundingAdminSeesAdministratorRoleChoicesAndSelfAccessHasNoControls() throws Exception {
+        String student="00000000-0000-4000-8000-000000000002",otherAdmin="00000000-0000-4000-8000-000000000003";
+        backend.role=AppData.Role.ADMIN;backend.profileCount=3;backend.profileRoles.put(student,AppData.Role.STUDENT);backend.profileRoles.put(otherAdmin,AppData.Role.ADMIN);
+        backend.authMetadata.addProperty("can_manage_admins",true);
+        for(boolean owner:new boolean[]{false,true}){
+            backend.canManageAdmins=owner;var user=data.authenticate("account0@example.invalid","long-password-test").orElseThrow();
+            fx(()->{
+                App.completeLogin(user);App.showAccountManagement();ComboBox<AppData.Role> choices=control("account-role-"+student,ComboBox.class);
+                assertEquals(owner,choices.getItems().contains(AppData.Role.ADMIN));assertTrue(choices.getItems().containsAll(List.of(AppData.Role.STUDENT,AppData.Role.VIEWER,AppData.Role.TEACHER)));
+                assertNull(stage.getScene().lookup("#account-role-"+TestBackend.ID));assertNull(stage.getScene().lookup("#change-role-"+TestBackend.ID));
+                assertTrue(button("change-role-"+student).isDisabled());
+                if(owner){
+                    assertNotNull(stage.getScene().lookup("#account-role-"+otherAdmin));choices.setValue(AppData.Role.ADMIN);assertFalse(button("change-role-"+student).isDisabled());
+                }else assertNull(stage.getScene().lookup("#account-role-"+otherAdmin));
+                resize(390,844);assertHorizontalFit(stage.getScene().getRoot(),390);capture(owner?"owner-account-access-390":"admin-account-access-390");return null;
+            });
+        }
+        assertTrue(backend.calls.stream().noneMatch(call->call.contains("/set_account_role")),"Inspecting role choices must not change any account");
+    }
+    @Test void profileIsTheLastMenuItemAboveLogoutForEveryRoleAndOpensTheCorrectAccount() throws Exception {
+        for(var role:AppData.Role.values()){
+            backend.role=role;var user=data.authenticate("account0@example.invalid","long-password-test").orElseThrow();
+            fx(()->{App.completeLogin(user);return null;});
+            for(int width:new int[]{320,390,1366})fx(()->{
+                resize(width,844);VBox footer=control("sidebar-footer",VBox.class);Button profile=button("nav-profile"),logout=button("logout-button");
+                assertSame(footer,profile.getParent());assertSame(footer,logout.getParent());
+                assertEquals(footer.getChildren().indexOf(logout)-1,footer.getChildren().indexOf(profile));
+                assertNull(control("desktop-primary-navigation",VBox.class).lookup("#nav-profile"));
+                assertNull(control("mobile-navigation",HBox.class).lookup("#nav-profile"));assertNull(control("sidebar-scroll",ScrollPane.class).lookup("#nav-profile"));
+                assertEquals(1,stage.getScene().getRoot().lookupAll("#nav-profile").size());
+                assertTrue(profile.localToScene(profile.getBoundsInLocal()).getMaxY()<=logout.localToScene(logout.getBoundsInLocal()).getMinY()+1);
+                if(System.getProperty("certiflow.snapshots")!=null&&role==AppData.Role.STUDENT&&(width==390||width==1366)){
+                    button("navigation-toggle").fire();layout();capture("student-drawer-profile-footer-"+width);button("navigation-close").fire();
                 }
-                captureRepresentative("roles");
-                for (String role : List.of("Student", "Teacher", "Admin")) {
-                    App.showLoginView(role, "");
-                    assertHorizontalFit(role + " login");
-                    assertTouchTarget(button("login-submit"));
-                    assertTouchTarget(control("login-username", TextField.class));
-                    assertTouchTarget(control("login-password", PasswordField.class));
-                    if (role.equals("Student")) captureRepresentative("login");
-                }
-            }
+                profile.fire();assertEquals(user.name(),control("profile-name",TextField.class).getText());
+                var route=App.class.getDeclaredField("currentRoute");route.setAccessible(true);assertEquals(role==AppData.Role.STUDENT?"student-profile":role==AppData.Role.VIEWER?"viewer-profile":"staff-profile",route.get(null));
+                button("return-button").fire();return null;
+            });
+        }
+    }
+    @Test void originalLogoLoadsAsBoundedProportionalImagesOnLoginAndApplicationPages() throws Exception {
+        fx(()->{
+            for(int width:new int[]{320,390,1366}){
+                resize(width,844);assertLogo("auth-hero-logo",225,180);assertLogo("auth-compact-logo",40,40);assertHorizontalFit(stage.getScene().getRoot(),width);
+            }return null;
+        });
+        var user=data.authenticate("account0@example.invalid","long-password-test").orElseThrow();
+        fx(()->{App.completeLogin(user);for(int width:new int[]{320,390,1366}){
+            resize(width,844);assertLogo("header-logo",32,32);assertLogo("sidebar-logo",32,32);
+            assertSame(control("header-logo",ImageView.class).getImage(),control("sidebar-logo",ImageView.class).getImage());assertHorizontalFit(stage.getScene().getRoot(),width);
+        }return null;});
+    }
+    @Test void chatPreservesContactDraftAndSendsUsingOnlyTheSelectedRecipient() throws Exception {
+        var user=data.authenticate(AppData.Role.STUDENT,"account0@example.invalid","long-password-test").orElseThrow();
+        AppData.Contact teacher=data.contacts().stream().filter(contact->contact.id().equals(TestBackend.TEACHER_ID)).findFirst().orElseThrow();
+        fx(()->{
+            App.completeLogin(user);App.showMessages();
+            ComboBox<AppData.Contact> people=control("messages-recipient",ComboBox.class);
+            assertFalse(people.isEditable());people.setValue(teacher);
+            control("message-body",TextArea.class).setText("Could we discuss my research project?");
+            people.setValue(null);assertEquals("",control("message-body",TextArea.class).getText());
+            people.setValue(teacher);assertEquals("Could we discuss my research project?",control("message-body",TextArea.class).getText());
+            assertFalse(button("message-send").isDisabled());button("message-send").fire();return null;
+        });
+        await(()->label("messages-feedback").getText().equals("Message sent."));
+        await(()->containsText(control("messages-list",VBox.class),"Could we discuss my research project?"));
+        fx(()->{
+            assertEquals(1,backend.messages.size());assertEquals(TestBackend.TEACHER_ID,backend.messages.get(0).get("recipient_id").getAsString());
+            assertEquals("Could we discuss my research project?",backend.messages.get(0).get("body").getAsString());
+            assertEquals("",control("message-body",TextArea.class).getText());assertTrue(button("message-send").isDisabled());
+            control("message-body",TextArea.class).setText("x".repeat(4001));assertTrue(button("message-send").isDisabled());
+            Parent oldPage=stage.getScene().getRoot();App.showHome();assertNull(oldPage.getScene());return null;
+        });
+    }
+    @Test void recentChatLoadsOldHistoryAndOwnMessageEditingPreservesTheDraft() throws Exception {
+        for(int i=1;i<=120;i++)backend.messages.add(TestBackend.messageRow(i,i%2==0?TestBackend.ID:TestBackend.TEACHER_ID,
+            i%2==0?TestBackend.TEACHER_ID:TestBackend.ID,"History message "+i,"2026-11-05T06:00:00Z"));
+        var user=data.authenticate(AppData.Role.STUDENT,"account0@example.invalid","long-password-test").orElseThrow();
+        fx(()->{App.completeLogin(user);App.showMessages();resize(390,844);return null;});
+        await(()->stage.getScene().lookup("#conversation-"+TestBackend.TEACHER_ID)!=null);
+        fx(()->{assertHorizontalFit(stage.getScene().getRoot(),390);capture("chat-inbox-populated-390");button("conversation-"+TestBackend.TEACHER_ID).fire();return null;});
+        await(()->label("messages-history-status").getText().contains("50 messages loaded"));
+        fx(()->{assertTrue(containsText(control("messages-list",VBox.class),"History message 120"));assertFalse(containsText(control("messages-list",VBox.class),"History message 1"));button("messages-load-older").fire();return null;});
+        await(()->label("messages-history-status").getText().contains("100 messages loaded"));
+        fx(()->{button("messages-load-older").fire();return null;});
+        await(()->label("messages-history-status").getText().contains("120 messages loaded"));
+        String ownId=backend.messages.get(119).get("id").getAsString(),receivedId=backend.messages.get(118).get("id").getAsString();
+        fx(()->{
+            assertTrue(containsText(control("messages-list",VBox.class),"History message 1"));assertFalse(button("messages-load-older").isVisible());
+            assertNull(stage.getScene().lookup("#message-edit-"+receivedId));
+            control("message-body",TextArea.class).setText("My unsent follow-up");button("message-edit-"+ownId).fire();
+            assertEquals("History message 120",control("message-body",TextArea.class).getText());assertEquals("Save edit",button("message-send").getText());
+            control("message-body",TextArea.class).setText("Discarded edit");button("message-edit-"+ownId).fire();
+            assertEquals("Discarded edit",control("message-body",TextArea.class).getText());button("message-edit-cancel").fire();
+            assertEquals("My unsent follow-up",control("message-body",TextArea.class).getText());
+            button("message-edit-"+ownId).fire();control("message-body",TextArea.class).setText("Updated research question");button("message-send").fire();return null;
+        });
+        await(()->label("messages-feedback").getText().equals("Message updated."));
+        fx(()->{
+            assertEquals(120,backend.messages.size());assertEquals("Updated research question",backend.messages.get(119).get("body").getAsString());
+            assertEquals("My unsent follow-up",control("message-body",TextArea.class).getText());
+            assertTrue(containsText(control("messages-list",VBox.class),"Updated research question"));
+            for(int width:new int[]{320,390,768,1366}){resize(width,844);assertHorizontalFit(stage.getScene().getRoot(),width);assertChatComposerInsideViewport();if(width==320||width==390||width==1366)capture("chat-conversation-populated-"+width);}
             return null;
         });
     }
-
-    @Test
-    void resizingTheSameScreenKeepsTheDraftAndNavigationUsable() throws Exception {
-        onFx(() -> {
-            resize(390, 844);
-            assertTrue(App.login(AppData.Role.STUDENT, "student", "student123"));
-            App.showStudentNoc();
-            Parent originalRoot = root();
-            TextArea reason = control("noc-reason", TextArea.class);
-            ComboBox<String> type = combo("noc-type");
-            type.setValue("Internship");
-            reason.setText("Please issue an NOC for my summer internship. I have completed the required coursework.");
-            for (double[] size : new double[][] {{1366, 768}, {360, 800}, {1440, 900}, {390, 844}}) {
-                resize(size[0], size[1]);
-                assertSame(originalRoot, root(), "Resizing must not replace the page or discard form state");
-                assertSame(reason, control("noc-reason", TextArea.class));
-                assertSame(type, combo("noc-type"));
-                assertEquals("Internship", type.getValue());
-                assertTrue(reason.getText().startsWith("Please issue an NOC"));
-                assertResponsiveDashboard("NOC draft after resizing", "home", "portfolios", "noc", "profile");
-                captureRepresentative("noc-draft");
-            }
-            return null;
+    @Test void chatSettingsPersistForTheAccountAndAreAppliedOnReopening() throws Exception {
+        var user=data.authenticate(AppData.Role.STUDENT,"account0@example.invalid","long-password-test").orElseThrow();
+        fx(()->{
+            App.completeLogin(user);App.showMessages(TestBackend.TEACHER_ID);control("chat-settings",TitledPane.class).setExpanded(true);
+            control("chat-enter-to-send",CheckBox.class).fire();control("chat-compact",CheckBox.class).fire();control("chat-large-text",CheckBox.class).fire();
+            control("chat-show-previews",CheckBox.class).fire();control("chat-auto-scroll",CheckBox.class).fire();return null;
+        });
+        CountDownLatch saved=new CountDownLatch(1);Background.execute(saved::countDown);assertTrue(saved.await(10,TimeUnit.SECONDS));
+        assertEquals(new ChatSettings(true,true,true,false,false),ChatSettings.load(directory,TestBackend.ID));
+        fx(()->{
+            App.showHome();App.showMessages(TestBackend.TEACHER_ID);control("chat-settings",TitledPane.class).setExpanded(true);
+            assertTrue(control("chat-enter-to-send",CheckBox.class).isSelected());assertTrue(control("chat-compact",CheckBox.class).isSelected());assertTrue(control("chat-large-text",CheckBox.class).isSelected());
+            assertFalse(control("chat-show-previews",CheckBox.class).isSelected());assertFalse(control("chat-auto-scroll",CheckBox.class).isSelected());
+            resize(390,844);assertHorizontalFit(stage.getScene().getRoot(),390);capture("chat-settings-390");
+            control("chat-settings",TitledPane.class).setExpanded(false);layout();assertChatComposerInsideViewport();return null;
         });
     }
-
-
-    @Test
-    void drawerRevealsOnHoverAndHidesAfterLeavingWithoutChangingDraft() throws Exception {
-        onFx(() -> {
-            resize(1366, 768);
-            assertTrue(App.login(AppData.Role.STUDENT, "student", "student123"));
-            App.showStudentNoc();
-            control("noc-reason", TextArea.class).setText("Keep this internship draft.");
-            HoverDrawer drawer = control("navigation-shell", HoverDrawer.class);
-            assertFalse(drawer.isOpen());
-            assertFalse(control("desktop-sidebar", VBox.class).isVisible());
-            fireMouse(control("sidebar-edge", Region.class), javafx.scene.input.MouseEvent.MOUSE_ENTERED);
-            assertTrue(drawer.isOpen());
-            fireMouse(control("sidebar-edge", Region.class), javafx.scene.input.MouseEvent.MOUSE_EXITED);
-            fireMouse(control("desktop-sidebar", VBox.class), javafx.scene.input.MouseEvent.MOUSE_ENTERED);
-            return null;
-        });
-        Thread.sleep(450);
-        onFx(() -> {
-            assertTrue(control("navigation-shell", HoverDrawer.class).isOpen(), "Crossing from the edge to the panel must not flicker closed");
-            captureRepresentative("drawer-open");
-            assertTrue(control("navigation-shell", HoverDrawer.class).isOpen());
-            fireMouse(control("desktop-sidebar", VBox.class), javafx.scene.input.MouseEvent.MOUSE_EXITED);
-            return null;
-        });
-        Thread.sleep(450);
-        onFx(() -> {
-            HoverDrawer drawer = control("navigation-shell", HoverDrawer.class);
-            assertFalse(drawer.isOpen(), "The drawer should hide after the pointer leaves");
-            assertFalse(control("desktop-sidebar", VBox.class).isVisible());
-            assertEquals("Keep this internship draft.", control("noc-reason", TextArea.class).getText());
-            button("navigation-toggle").fire();
-            assertTrue(drawer.isOpen());
-            button("navigation-close").fire();
-            assertFalse(drawer.isOpen());
-            button("navigation-toggle").fire();
-            drawer.fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED,
-                    "", "", javafx.scene.input.KeyCode.ESCAPE, false, false, false, false));
-            assertFalse(drawer.isOpen());
-            drawer.fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED,
-                    "", "", javafx.scene.input.KeyCode.M, false, false, true, false));
-            assertTrue(drawer.isOpen());
-            fireMouse(control("noc-reason", TextArea.class), javafx.scene.input.MouseEvent.MOUSE_PRESSED);
-            assertFalse(drawer.isOpen(), "Clicking outside closes the overlay");
-            drawer.reveal(false);
-            resize(390, 844);
-            assertFalse(drawer.isOpen());
-            assertTrue(effectivelyVisible(button("navigation-toggle")));
-            button("navigation-toggle").fire();
-            assertTrue(drawer.isOpen(), "The colour menu must also open on phones");
-            button("navigation-close").fire();
-            assertTrue(effectivelyVisible(button("nav-noc")));
-            assertEquals("Keep this internship draft.", control("noc-reason", TextArea.class).getText());
-            return null;
-        });
+    @Test void refreshingAfterALargeArrivalBurstKeepsSkippedHistoryReachable() throws Exception {
+        for(int i=1;i<=60;i++)backend.messages.add(TestBackend.messageRow(i,TestBackend.ID,TestBackend.TEACHER_ID,"Earlier "+i,"2026-11-05T06:00:00Z"));
+        var user=data.authenticate(AppData.Role.STUDENT,"account0@example.invalid","long-password-test").orElseThrow();
+        fx(()->{App.completeLogin(user);App.showMessages(TestBackend.TEACHER_ID);return null;});
+        await(()->label("messages-history-status").getText().contains("50 messages loaded"));
+        for(int i=61;i<=160;i++)backend.messages.add(TestBackend.messageRow(i,TestBackend.ID,TestBackend.TEACHER_ID,"Later "+i,"2026-11-05T06:10:00Z"));
+        fx(()->{button("messages-refresh").fire();return null;});
+        await(()->label("messages-feedback").getText().equals("Conversation refreshed."));
+        fx(()->{assertTrue(containsText(control("messages-list",VBox.class),"Later 160"));button("messages-load-older").fire();return null;});
+        await(()->label("messages-history-status").getText().contains("100 messages loaded"));
+        fx(()->{assertTrue(containsText(control("messages-list",VBox.class),"Later 61"));button("messages-load-older").fire();return null;});
+        await(()->label("messages-history-status").getText().contains("150 messages loaded"));
+        fx(()->{button("messages-load-older").fire();return null;});
+        await(()->label("messages-history-status").getText().contains("160 messages loaded"));
+        fx(()->{assertTrue(containsText(control("messages-list",VBox.class),"Earlier 1"));return null;});
     }
-
-
-    @Test
-    void palettesPersistAndAllThreeRolesStayUsableInLightAndDarkAppearance() throws Exception {
-        for (UiSettings.Palette palette : UiSettings.Palette.values()) {
-            for (boolean dark : List.of(false, true)) {
-                onFx(() -> {
-                    UiSettings.palette.set(palette);
-                    UiSettings.dark.set(dark);
-                    for (AppData.Role role : AppData.Role.values()) {
-                        String name = role.name().toLowerCase(java.util.Locale.ROOT);
-                        for (double[] size : new double[][] {{390, 844}, {1366, 768}}) {
-                            resize(size[0], size[1]);
-                            assertTrue(App.login(role, name, name + "123"));
-                            assertEquals(dark, root().getPseudoClassStates().contains(javafx.css.PseudoClass.getPseudoClass("dark")));
-                            assertTrue(root().getPseudoClassStates().contains(javafx.css.PseudoClass.getPseudoClass(palette.key())));
-                            assertResponsiveDashboard(name + " theme", role == AppData.Role.STUDENT
-                                    ? new String[] {"home", "portfolios", "noc", "profile"}
-                                    : new String[] {"home", "requests", "history", "profile"});
-                            captureRepresentative(name + "-" + palette.key() + (dark ? "-dark" : "-light"));
-                            if (dark && palette == UiSettings.Palette.FOREST) {
-                                if (role == AppData.Role.STUDENT) App.showStudentNoc(); else App.showTeacherDashboard();
-                                assertHorizontalFit("Dark form");
-                                if (role != AppData.Role.STUDENT) {
-                                    Button reject = (Button) root().lookup(".danger-button");
-                                    assertEquals(javafx.scene.paint.Color.web("#f4a2b3"), reject.getTextFill());
-                                }
-                                captureRepresentative(name + "-dark-form");
-                            }
-                        }
-                    }
-                    return null;
-                });
-            }
-        }
-        onFx(() -> {
-            resize(390, 844);
-            App.logout();
-            login("student");
-            App.showStudentNoc();
-            Parent original = root();
-            TextArea reason = control("noc-reason", TextArea.class);
-            reason.setText("Keep this draft when I change colours.");
-            button("navigation-toggle").fire();
-            var pane = control("appearance-panel", javafx.scene.control.TitledPane.class);
-            pane.setExpanded(true);
-            root();
-            control("sidebar-scroll", ScrollPane.class).setVvalue(1);
-            root();
-            assertReachableInViewport(control("palette-plum", javafx.scene.control.ToggleButton.class), "Palette choice");
-            control("palette-plum", javafx.scene.control.ToggleButton.class).fire();
-            assertEquals(UiSettings.Palette.PLUM, UiSettings.palette.get());
-            var dark = control("dark-appearance", javafx.scene.control.CheckBox.class);
-            if (dark.isSelected()) dark.fire();
-            assertFalse(UiSettings.dark.get());
-            assertSame(original, root(), "Switching palettes must not replace or clear a form");
-            assertEquals("Keep this draft when I change colours.", reason.getText());
-            assertNull(root().lookup("#appearance-menu"), "There must be no appearance control in the top-right header");
-            captureRepresentative("colour-menu");
-            UiSettings.palette.set(UiSettings.Palette.FOREST);
-            UiSettings.dark.set(true);
-            UiSettings.load(data.dataDirectory());
-            assertEquals(UiSettings.Palette.PLUM, UiSettings.palette.get());
-            assertFalse(UiSettings.dark.get());
-            return null;
+    @Test void sharingPreviewStartsPrivateAndPublishesOnlyAfterExplicitAudienceAndFileChoice() throws Exception {
+        var user=data.authenticate(AppData.Role.STUDENT,"account0@example.invalid","long-password-test").orElseThrow();
+        var project=data.createProject(user,"Research project","Project","Sensitive source description","https://example.invalid/private",TestBackend.TEACHER_ID);
+        Path attachment=Files.writeString(directory.resolve("evidence.txt"),"Supporting evidence");var file=data.addPortfolio(user,"Evidence",attachment,project.id());
+        Scene panel=fx(()->{App.completeLogin(user);return openHiddenSharingDialog((Button)SharingControls.forProject(project));});
+        await(()->!shareControl(panel,"share-save",Button.class).isDisabled());
+        fx(()->{
+            assertEquals(0,shareControl(panel,"share-audience",ComboBox.class).getSelectionModel().getSelectedIndex());
+            assertEquals("",shareControl(panel,"share-summary",TextArea.class).getText());assertEquals("",shareControl(panel,"share-link",TextField.class).getText());
+            assertTrue(shareControl(panel,"share-copy",Button.class).isDisabled());assertTrue(backend.shares.isEmpty());
+            assertFalse(containsText(shareControl(panel,"share-preview",VBox.class),"Sensitive source description"));
+            var boxes=panel.getRoot().lookupAll(".check-box").stream().filter(CheckBox.class::isInstance).map(CheckBox.class::cast).toList();assertEquals(1,boxes.size());assertFalse(boxes.get(0).isSelected());
+            shareControl(panel,"share-author",TextField.class).setText("Chosen public name");shareControl(panel,"share-summary",TextArea.class).setText("Only this chosen summary");
+            shareControl(panel,"share-audience",ComboBox.class).getSelectionModel().select(3);boxes.get(0).setSelected(true);
+            assertTrue(containsText(shareControl(panel,"share-preview",VBox.class),"Only this chosen summary"));
+            assertTrue(containsText(shareControl(panel,"share-preview",VBox.class),"Included file: evidence.txt"));assertTrue(backend.shares.isEmpty());
+            shareControl(panel,"share-save",Button.class).fire();return null;
+        });
+        await(()->shareControl(panel,"share-feedback",Label.class).getText().startsWith("Published exactly"));
+        fx(()->{
+            assertEquals(1,backend.shares.size());assertEquals("BOTH",backend.lastBody.get("audience").getAsString());
+            assertEquals(file.id(),backend.lastBody.getAsJsonArray("file_ids").get(0).getAsString());assertFalse(shareControl(panel,"share-copy",Button.class).isDisabled());
+            shareControl(panel,"share-audience",ComboBox.class).getSelectionModel().select(0);shareControl(panel,"share-save",Button.class).fire();return null;
+        });
+        await(()->shareControl(panel,"share-feedback",Label.class).getText().startsWith("Publication removed"));
+        fx(()->{assertTrue(backend.shares.isEmpty());assertTrue(shareControl(panel,"share-copy",Button.class).isDisabled());return null;});
+    }
+    @Test void unavailableSharingDisablesSavingAndNocPrivateDetailsNeverFillThePreview() throws Exception {
+        var user=data.authenticate(AppData.Role.STUDENT,"account0@example.invalid","long-password-test").orElseThrow();
+        var request=data.submit(user,"Scholarship","Private personal application reason",TestBackend.TEACHER_ID);backend.sharingUnavailable=true;
+        Scene panel=fx(()->{App.completeLogin(user);return openHiddenSharingDialog((Button)SharingControls.forRequest(request));});
+        await(()->shareControl(panel,"share-feedback",Label.class).getText().startsWith("Could not load the current sharing choice"));
+        fx(()->{
+            assertTrue(shareControl(panel,"share-save",Button.class).isDisabled());assertTrue(shareControl(panel,"share-copy",Button.class).isDisabled());assertTrue(shareControl(panel,"share-open",Button.class).isDisabled());
+            assertEquals("",shareControl(panel,"share-summary",TextArea.class).getText());
+            assertFalse(containsText(shareControl(panel,"share-preview",VBox.class),"Private personal application reason"));
+            assertFalse(containsText(shareControl(panel,"share-preview",VBox.class),"account0@example.invalid"));
+            shareControl(panel,"share-audience",ComboBox.class).getSelectionModel().select(3);shareControl(panel,"share-save",Button.class).fire();
+            assertTrue(backend.shares.isEmpty());assertTrue(backend.calls.stream().noneMatch(call->call.endsWith("/publish_share")||call.endsWith("/unpublish_share")));return null;
         });
     }
-
-    @Test
-    void returnButtonFollowsPageHistoryAndNeverCrossesAnAccountBoundary() throws Exception {
-        onFx(() -> {
-            resize(390, 844);
-            login("student");
-            assertTrue(button("return-button").isDisabled());
-            assertInsideViewport(button("return-button").localToScene(button("return-button").getLayoutBounds()), "Top-left return");
-            App.showStudentNoc();
-            App.showStudentPortfolio();
-            assertFalse(button("return-button").isDisabled());
-            button("return-button").fire();
-            assertNotNull(control("noc-reason", TextArea.class));
-            button("return-button").fire();
-            assertHasLabel("Student Home");
-            assertTrue(button("return-button").isDisabled());
-            App.showStudentProfile();
-            App.logout();
-            login("teacher");
-            assertTrue(button("return-button").isDisabled(), "Signing in must start fresh page history");
-            App.showTeacherDashboard();
-            App.showTeacherHistory();
-            button("return-button").fire();
-            assertNotNull(control("request-search", TextField.class));
-            button("return-button").fire();
-            assertHasLabel("Teacher home");
-            App.logout();
-            App.showLoginView("Admin", "");
-            button("return-button").fire();
-            assertNotNull(button("role-admin"));
-            return null;
-        });
+    private Scene openHiddenSharingDialog(Button launch) {
+        stage.setWidth(1200);stage.setHeight(800);launch.fire();
+        var window=javafx.stage.Window.getWindows().stream().filter(w->w!=stage&&w.getScene()!=null&&w.getScene().lookup("#share-preview")!=null).findFirst().orElseThrow();
+        Scene scene=window.getScene();window.hide();return scene;
     }
-
-    @Test
-    void decorativeAssetsAreLocalTransparentAndAnimated() throws Exception {
-        try (var input = App.class.getResourceAsStream("/art/study-books.png")) {
-            assertNotNull(input);
-            BufferedImage illustration = ImageIO.read(input);
-            assertTrue(illustration.getColorModel().hasAlpha());
-            assertEquals(0, illustration.getRGB(0, 0) >>> 24);
-        }
-        try (var input = App.class.getResourceAsStream("/art/study-sparkle.gif");
-                var stream = ImageIO.createImageInputStream(input)) {
-            var reader = ImageIO.getImageReadersByFormatName("gif").next();
-            try {
-                reader.setInput(stream);
-                assertEquals(24, reader.getNumImages(true), "The decorative GIF should contain its complete gentle loop");
-                assertEquals(96, reader.getWidth(0));
-                assertEquals(new java.awt.Color(216,168,77).getRGB(), reader.read(0).getRGB(45,48), "The animation must use the warm palette");
-            } finally { reader.dispose(); }
-        }
-        onFx(() -> {
-            login("student");
-            assertTrue(control("academic-background", AcademicBackdrop.class).isMouseTransparent());
-            assertNotNull(root().lookup(".study-illustration"));
-            assertNotNull(root().lookup("#study-sparkle"));
-            App.showStudentProfile();
-            assertNotNull(root().lookup(".academic-sticker"));
-            return null;
-        });
+    private static <T extends Node>T shareControl(Scene scene,String id,Class<T> type) {
+        Parent root=scene.getRoot();root.applyCss();root.resize(640,720);root.layout();Node node=scene.lookup("#"+id);assertNotNull(node,id);return type.cast(node);
     }
-
-    @Test
-    void invalidFormsShowInlineFeedbackAndSuccessNoticeCanBeDismissed() throws Exception {
-        onFx(() -> {
-            resize(390, 844);
-            login("student");
-            App.showStudentNoc();
-            int previous = data.requests().size();
-            button("noc-submit").fire();
-            Label message = control("noc-feedback", Label.class);
-            assertTrue(message.isVisible());
-            assertTrue(message.getStyleClass().contains("feedback-error"));
-            assertEquals(previous, data.requests().size());
-            combo("noc-type").setValue("Internship");
-            control("noc-reason", TextArea.class).setText("My summer internship needs an NOC.");
-            button("noc-submit").fire();
-            assertTrue(message.getStyleClass().contains("feedback-success"));
-            assertFalse(message.getStyleClass().contains("feedback-error"));
-            App.showStudentPortfolio();
-            button("portfolio-save").fire();
-            assertTrue(control("portfolio-feedback", Label.class).isVisible());
-            assertTrue(control("portfolio-feedback", Label.class).getText().contains("Choose a document"));
-            Ui.toast("Your report was saved successfully.");
-            assertTrue(control("success-notice", ToastNotice.class).isVisible());
-            Node notice = control("success-notice", ToastNotice.class);
-            Node bottomNavigation = root().lookup("#mobile-navigation");
-            assertTrue(notice.localToScene(notice.getLayoutBounds()).getMaxY() < bottomNavigation.localToScene(bottomNavigation.getLayoutBounds()).getMinY(), "A success notice must leave the phone navigation accessible");
-            assertHorizontalFit("Success notice");
-            captureRepresentative("inline-feedback");
-            descendants(control("success-notice", ToastNotice.class)).stream()
-                    .filter(Button.class::isInstance).map(Button.class::cast).findFirst().orElseThrow().fire();
-            assertFalse(control("success-notice", ToastNotice.class).isVisible());
-            return null;
-        });
-    }
-
-    private static void fireMouse(Node target, javafx.event.EventType<javafx.scene.input.MouseEvent> type) {
-        target.fireEvent(new javafx.scene.input.MouseEvent(type, 0, 0, 0, 0,
-                javafx.scene.input.MouseButton.NONE, 0, false, false, false, false,
-                false, false, false, true, false, true, null));
-    }
-
-    private void assertResponsiveDashboard(String route, String... ids) {
-        Parent page = root();
-        ScrollPane scroll = control("page-scroll", ScrollPane.class);
-        Bounds scrollBounds = scroll.localToScene(scroll.getLayoutBounds());
-        assertTrue(scroll.getHeight() >= 80, route + " needs usable scrollable height");
-        assertTrue(scroll.getWidth() >= 240, route + " needs usable content width");
-        boolean wide = viewportWidth >= 960;
-        Node sidebar = page.lookup("#desktop-sidebar");
-        Node mobileNavigation = page.lookup("#mobile-navigation");
-        assertFalse(effectivelyVisible(sidebar), route + " should keep the drawer hidden until requested");
-        HoverDrawer drawer = control("navigation-shell", HoverDrawer.class);
-        double contentWidth = scroll.getWidth();
-        if (wide) {
-            assertReachableInViewport(button("navigation-toggle"), route + " menu button");
-            drawer.reveal(false);
-            root();
-            assertTrue(effectivelyVisible(sidebar));
-            assertEquals(contentWidth, scroll.getWidth(), 0.1, "Opening the drawer must not resize the content");
-        }
-        assertEquals(!wide, effectivelyVisible(mobileNavigation), route + " should switch the mobile navigation");
-        if (!wide) { drawer.reveal(false); root(); }
-        Button logout = button("logout-button");
-        assertTrue(effectivelyVisible(logout));
-        assertReachableInViewport(logout, route + " logout");
-        if (!wide) { drawer.close(false); root(); }
-        assertNull(page.lookup(".app-eyebrow"), "Repeated role/page labels must be removed");
-        assertNull(page.lookup(".workspace-badge"), "The repeated workspace badge must be removed");
-        assertTrue(descendants(page).stream().filter(javafx.scene.control.Labeled.class::isInstance)
-                .map(javafx.scene.control.Labeled.class::cast).noneMatch(label -> "Reduce motion".equals(label.getText())));
-        if (viewportWidth < 600) {
-            Label heading = (Label) page.lookup(".page-title");
-            assertTrue(heading.getFont().getSize() >= 22, route + " phone page heading should retain visual hierarchy");
-            for (Node node : descendants(page)) {
-                if (node instanceof Label number && number.getStyleClass().contains("stat-number")) {
-                    assertTrue(number.getFont().getSize() >= 26, "Phone statistic numbers should remain legible");
-                }
-            }
-        }
-        for (String id : ids) {
-            Button navigation = button("nav-" + id);
-            Bounds bounds = navigation.localToScene(navigation.getLayoutBounds());
-            assertTrue(effectivelyVisible(navigation) && !navigation.isDisabled(), route + ": " + id + " must be usable");
-            assertInsideViewport(bounds, route + " navigation " + id);
-            assertTouchTarget(navigation);
-            if (wide) assertTrue(bounds.getMaxX() <= 260,
-                    route + " navigation must remain inside its overlay: " + id);
-            else assertTrue(bounds.getMinY() >= scrollBounds.getMaxY() - 1,
-                    route + " bottom navigation overlaps the content: " + id);
-        }
-        if (viewportWidth >= 1366) {
-            assertTrue(scroll.getWidth() > 920, route + " should use laptop width beyond the previous 920px container");
-        }
-        if (wide) drawer.close(false);
-        assertPanelsReflow(page, "noc-form-panel", "noc-history-panel");
-        assertPanelsReflow(page, "portfolio-form-panel", "portfolio-list-panel");
-        assertPanelsReflow(page, "profile-identity-panel", "profile-account-panel");
-        assertPanelsReflow(page, "report-settings-panel", "report-preview-panel");
-        assertHorizontalFit(route);
-    }
-
-    private void assertPanelsReflow(Parent page, String firstId, String secondId) {
-        Node first = page.lookup("#" + firstId);
-        Node second = page.lookup("#" + secondId);
-        if (first == null || second == null) return;
-        Bounds firstBounds = first.localToScene(first.getLayoutBounds());
-        Bounds secondBounds = second.localToScene(second.getLayoutBounds());
-        if (viewportWidth <= 390) {
-            assertTrue(secondBounds.getMinY() >= firstBounds.getMaxY() - 1,
-                    firstId + " and " + secondId + " should stack on a phone");
-        } else if (viewportWidth >= 1366) {
-            assertTrue(secondBounds.getMinX() >= firstBounds.getMaxX() - 1,
-                    firstId + " and " + secondId + " should use separate laptop columns");
+    private void assertChatComposerInsideViewport() {
+        layout();double bottom=stage.getScene().getHeight();Node navigation=stage.getScene().lookup("#mobile-navigation");
+        if(navigation!=null&&navigation.isVisible()&&navigation.isManaged())bottom=Math.min(bottom,navigation.localToScene(navigation.getBoundsInLocal()).getMinY());
+        for(Node node:List.of(control("message-body",TextArea.class),button("message-send"))){
+            assertTrue(node.isVisible()&&node.isManaged(),node.getId()+" must be visible");
+            var bounds=node.localToScene(node.getBoundsInLocal());
+            assertTrue(bounds.getMinY()>=-1&&bounds.getMaxY()<=bottom+1,node.getId()+" must fit above navigation: "+bounds+" bottom="+bottom);
         }
     }
-
-    private void assertHorizontalFit(String label) {
-        Parent page = root();
-        for (Node node : descendants(page)) {
-            boolean inspect = node instanceof Button || node instanceof TextField || node instanceof TextArea
-                    || node instanceof ComboBox<?> || node.getStyleClass().contains("app-card")
-                    || node.getStyleClass().contains("app-heading") || node.getStyleClass().contains("auth-card");
-            if (!inspect || !effectivelyVisible(node)) continue;
-            Bounds bounds = node.localToScene(node.getLayoutBounds());
-            assertTrue(bounds.getMinX() >= -1 && bounds.getMaxX() <= viewportWidth + 1,
-                    () -> label + " at " + viewportWidth + "×" + viewportHeight + " clips "
-                            + node.getClass().getSimpleName() + "#" + node.getId() + " horizontally: " + bounds);
-        }
-        for (Node node : descendants(page)) {
-            if (node instanceof ScrollPane scroll && effectivelyVisible(scroll)) {
-                Bounds content = scroll.getContent().getLayoutBounds();
-                assertTrue(content.getWidth() <= scroll.getViewportBounds().getWidth() + 1,
-                        label + " requires horizontal scrolling despite its fit-to-width layout");
-            }
-        }
+    private void assertLogo(String id,double maxWidth,double maxHeight){
+        ImageView logo=control(id,ImageView.class);var image=logo.getImage();assertNotNull(image,id);assertFalse(image.isError(),id);assertNotNull(image.getPixelReader(),id);
+        assertTrue(image.getWidth()>0&&image.getHeight()>0,id);assertTrue(logo.isPreserveRatio(),id);
+        assertTrue(logo.getFitWidth()>0&&logo.getFitWidth()<=maxWidth&&logo.getFitHeight()>0&&logo.getFitHeight()<=maxHeight,id);
+        var viewport=logo.getViewport();assertNotNull(viewport,id);assertTrue(viewport.getWidth()>0&&viewport.getHeight()>0,id);
+        assertTrue(viewport.getMinX()>=0&&viewport.getMinY()>=0&&viewport.getMaxX()<=image.getWidth()&&viewport.getMaxY()<=image.getHeight(),id);
+        var bounds=logo.getBoundsInLocal();assertTrue(bounds.getWidth()<=maxWidth+1&&bounds.getHeight()<=maxHeight+1,id);
+        assertEquals(viewport.getWidth()/viewport.getHeight(),bounds.getWidth()/bounds.getHeight(),0.02,id+" must preserve the original artwork proportions");
     }
-
-    private void assertTouchTarget(Node node) {
-        if (viewportWidth >= 960) return;
-        Bounds bounds = node.getLayoutBounds();
-        assertTrue(bounds.getWidth() >= 44 && bounds.getHeight() >= 44,
-                () -> "Phone touch target is smaller than 44px: " + node.getClass().getSimpleName()
-                        + "#" + node.getId() + " (" + bounds.getWidth() + "×" + bounds.getHeight() + ")");
+    private record PageCase(String name,Runnable open) {}
+    private void capture(String name) throws Exception {
+        String output=System.getProperty("certiflow.snapshots");if(output==null)return;
+        var image=stage.getScene().getRoot().snapshot(null,null);
+        var buffered=new java.awt.image.BufferedImage((int)image.getWidth(),(int)image.getHeight(),java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        int[] pixels=new int[(int)image.getWidth()*(int)image.getHeight()];
+        image.getPixelReader().getPixels(0,0,(int)image.getWidth(),(int)image.getHeight(),javafx.scene.image.PixelFormat.getIntArgbInstance(),pixels,0,(int)image.getWidth());
+        buffered.setRGB(0,0,(int)image.getWidth(),(int)image.getHeight(),pixels,0,(int)image.getWidth());
+        Files.createDirectories(Path.of(output));javax.imageio.ImageIO.write(buffered,"png",Path.of(output,name+".png").toFile());
     }
-
-    private void assertInsideViewport(Bounds bounds, String description) {
-        assertTrue(bounds.getMinX() >= -1 && bounds.getMinY() >= -1
-                && bounds.getMaxX() <= viewportWidth + 1 && bounds.getMaxY() <= viewportHeight + 1,
-                () -> description + " is clipped at " + viewportWidth + "×" + viewportHeight + ": " + bounds);
+    private static boolean containsText(Node node,String text) {
+        if(node instanceof Labeled label&&text.equals(label.getText()))return true;
+        if(node instanceof Parent parent)for(Node child:parent.getChildrenUnmodifiable())if(containsText(child,text))return true;
+        return false;
     }
-
-    private void assertReachableInViewport(Node node, String description) {
-        Bounds bounds = node.localToScene(node.getLayoutBounds());
-        if (bounds.getMinY() >= -1 && bounds.getMaxY() <= viewportHeight + 1) {
-            assertInsideViewport(bounds, description);
-            return;
-        }
-        ScrollPane ancestor = null;
-        for (Parent parent = node.getParent(); parent != null; parent = parent.getParent()) {
-            if (parent instanceof ScrollPane scroll) { ancestor = scroll; break; }
-        }
-        assertNotNull(ancestor, description + " must remain visible or reachable in a scrolling sidebar");
-        double previous = ancestor.getVvalue();
-        ancestor.setVvalue(1);
-        root();
-        assertInsideViewport(node.localToScene(node.getLayoutBounds()), description + " after scrolling");
-        ancestor.setVvalue(previous);
-        root();
+    @Test void capturesCurrentLoginAtLaptopAndPhoneSizes() throws Exception {
+        String output=System.getProperty("certiflow.snapshots");if(output==null)return;
+        fx(()->{App.showLoginView("Admin","");for(int width:new int[]{390,1280}){resize(width,844);var image=stage.getScene().getRoot().snapshot(null,null);
+            var buffered=new java.awt.image.BufferedImage((int)image.getWidth(),(int)image.getHeight(),java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            int[] pixels=new int[(int)image.getWidth()*(int)image.getHeight()];image.getPixelReader().getPixels(0,0,(int)image.getWidth(),(int)image.getHeight(),javafx.scene.image.PixelFormat.getIntArgbInstance(),pixels,0,(int)image.getWidth());
+            buffered.setRGB(0,0,(int)image.getWidth(),(int)image.getHeight(),pixels,0,(int)image.getWidth());Files.createDirectories(Path.of(output));javax.imageio.ImageIO.write(buffered,"png",Path.of(output,"login-"+width+".png").toFile());}return null;});
     }
-
-    private static boolean effectivelyVisible(Node node) {
-        if (node == null || !node.isManaged()) return false;
-        for (Node ancestor = node; ancestor != null; ancestor = ancestor.getParent()) {
-            if (!ancestor.isVisible()) return false;
-        }
-        return true;
-    }
-
-    private void resize(double width, double height) {
-        viewportWidth = width;
-        viewportHeight = height;
-        root();
-    }
-
-    private void captureRepresentative(String name) throws Exception {
-        String directory = System.getProperty("certiflow.snapshots");
-        if (directory == null || directory.isBlank()) return;
-        String device = viewportWidth == 390 && viewportHeight == 844 ? "phone"
-                : viewportWidth == 1366 && viewportHeight == 768 ? "laptop" : null;
-        if (device == null) return;
-        Path destination = Path.of(directory).resolve(name + "-" + device + ".png");
-        Files.createDirectories(destination.toAbsolutePath().getParent());
-        Parent page = root();
-        HoverDrawer drawer = (HoverDrawer) page.lookup("#navigation-shell");
-        boolean drawerWasOpen = drawer != null && drawer.isOpen();
-        // A hidden Stage does not resize its Scene when its root is resized. Give snapshot's
-        // CSS/layout pass a matching Scene while keeping the exact same live control tree.
-        Scene previousScene = stage.getScene();
-        if (previousScene.getWidth() != viewportWidth || previousScene.getHeight() != viewportHeight) {
-            List<String> stylesheets = List.copyOf(previousScene.getStylesheets());
-            previousScene.setRoot(new VBox());
-            Scene resizedScene = new Scene(page, viewportWidth, viewportHeight);
-            resizedScene.getStylesheets().addAll(stylesheets);
-            stage.setScene(resizedScene);
-            root();
-        }
-        if (drawerWasOpen) { drawer.reveal(false); root(); }
-        SnapshotParameters parameters = new SnapshotParameters();
-        parameters.setViewport(new Rectangle2D(0, 0, viewportWidth, viewportHeight));
-        WritableImage snapshot = page.snapshot(parameters, new WritableImage((int) viewportWidth, (int) viewportHeight));
-        BufferedImage image = new BufferedImage((int) viewportWidth, (int) viewportHeight, BufferedImage.TYPE_INT_ARGB);
-        int[] pixels = new int[(int) viewportWidth * (int) viewportHeight];
-        snapshot.getPixelReader().getPixels(0, 0, (int) viewportWidth, (int) viewportHeight,
-                javafx.scene.image.PixelFormat.getIntArgbInstance(), pixels, 0, (int) viewportWidth);
-        image.setRGB(0, 0, (int) viewportWidth, (int) viewportHeight, pixels, 0, (int) viewportWidth);
-        assertTrue(ImageIO.write(image, "png", destination.toFile()));
-    }
-
-    private void login(String username) {
-        button("role-" + username).fire();
-        control("login-username", TextField.class).setText(username);
-        control("login-password", PasswordField.class).setText(username + "123");
-        button("login-submit").fire();
-        assertEquals(username, App.user().username());
-    }
-
-    private void assertNavigationFits(String... ids) {
-        root();
-        ScrollPane scroll = control("page-scroll", ScrollPane.class);
-        assertTrue(scroll.getHeight() > 100, "Scrollable content must retain usable height at 640×560");
-        Bounds contentBounds = scroll.localToScene(scroll.getLayoutBounds());
-        for (String id : ids) {
-            Button nav = button("nav-" + id);
-            Bounds bounds = nav.localToScene(nav.getLayoutBounds());
-            assertTrue(nav.isVisible() && !nav.isDisabled());
-            assertTrue(bounds.getWidth() > 40 && bounds.getHeight() > 20, "Navigation button is too small: " + id);
-            assertTrue(bounds.getMinX() >= -0.5 && bounds.getMaxX() <= 640.5, "Navigation is horizontally clipped: " + id);
-            assertTrue(bounds.getMinY() >= contentBounds.getMaxY() - 0.5, "Navigation overlaps scrolling content: " + id);
-            assertTrue(bounds.getMaxY() <= 560.5, "Navigation is below the minimum window: " + id);
-        }
-    }
-
-    private Parent root() {
-        Parent root = stage.getScene().getRoot();
-        root.resize(viewportWidth, viewportHeight);
-        for (int pass = 0; pass < 4; pass++) {
-            root.applyCss();
-            root.layout();
-        }
-        return root;
-    }
-
-    private <T extends Node> T control(String id, Class<T> type) {
-        Node node = root().lookup("#" + id);
-        assertNotNull(node, "Missing control: " + id);
-        assertTrue(type.isInstance(node), "Unexpected control type for " + id);
-        return type.cast(node);
-    }
-
-    private Button button(String id) { return control(id, Button.class); }
-
-    @SuppressWarnings("unchecked")
-    private ComboBox<String> combo(String id) { return (ComboBox<String>) control(id, ComboBox.class); }
-
-    private Button textButton(String text) {
-        return descendants(root()).stream().filter(Button.class::isInstance).map(Button.class::cast)
-                .filter(button -> button.getText().equals(text)).findFirst()
-                .orElseThrow(() -> new AssertionError("Missing button: " + text));
-    }
-
-    private void assertHasLabel(String text) {
-        List<String> labels = descendants(root()).stream().filter(Label.class::isInstance).map(Label.class::cast)
-                .filter(Label::isVisible).map(Label::getText).toList();
-        assertTrue(labels.contains(text), () -> "Missing visible label '" + text + "' in " + labels);
-    }
-
-    private static List<Node> descendants(Node node) {
-        List<Node> nodes = new ArrayList<>();
-        nodes.add(node);
-        if (node instanceof Parent parent) {
-            for (Node child : parent.getChildrenUnmodifiable()) nodes.addAll(descendants(child));
-        }
-        return nodes;
-    }
-
-    private static void setAppField(String name, Object value) throws ReflectiveOperationException {
-        Field field = App.class.getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(null, value);
-    }
-
-    private static <T> T onFx(Callable<T> action) throws Exception {
-        FutureTask<T> future = new FutureTask<>(action);
-        Platform.runLater(future);
-        try {
-            return future.get(60, TimeUnit.SECONDS);
-        } catch (ExecutionException exception) {
-            if (exception.getCause() instanceof Exception cause) throw cause;
-            if (exception.getCause() instanceof Error cause) throw cause;
-            throw new RuntimeException(exception.getCause());
-        }
-    }
+    private void resize(double width,double height){ Parent root=stage.getScene().getRoot();stage.getScene().setRoot(new VBox());Scene scene=new Scene(root,width,height);scene.getStylesheets().add(App.class.getResource("/style.css").toExternalForm());scene.getStylesheets().add(App.class.getResource("/auth.css").toExternalForm());scene.getStylesheets().add(App.class.getResource("/chat.css").toExternalForm());stage.setScene(scene);root.applyCss();root.resize(width,height);root.layout(); }
+    private static void assertHorizontalFit(Node node,double width){if(!node.isVisible()||!node.isManaged()||node.getId()!=null&&node.getId().equals("desktop-sidebar"))return;if(node instanceof Control){var b=node.localToScene(node.getBoundsInLocal());if(b.getMaxX()>0&&b.getMinX()<width)assertTrue(b.getMaxX()<=width+2,"Overflow: "+node.getId()+" "+b);}if(node instanceof Parent p)for(Node child:p.getChildrenUnmodifiable())assertHorizontalFit(child,width);}
+    private static void assertNoDemoText(Node node){if(node instanceof Labeled l){String s=l.getText()==null?"":l.getText().toLowerCase();assertFalse(s.contains("demo")||s.contains("sarah")||s.contains("student123"),s);}if(node instanceof Parent p)for(Node child:p.getChildrenUnmodifiable())assertNoDemoText(child);}
+    private void await(BooleanSupplier check)throws Exception{long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(10);while(System.nanoTime()<until){if(fx(()->{layout();return check.getAsBoolean();}))return;Thread.sleep(25);}fail("Timed out waiting for background operation");}
+    private Button button(String id){return control(id,Button.class);}private Label label(String id){return control(id,Label.class);}
+    private void layout(){Parent root=stage.getScene().getRoot();root.applyCss();root.resize(stage.getScene().getWidth(),stage.getScene().getHeight());root.layout();}
+    private <T extends Node>T control(String id,Class<T> type){layout();Node n=stage.getScene().lookup("#"+id);assertNotNull(n,id);return type.cast(n);}
+    private static void field(String name,Object value)throws Exception{var f=App.class.getDeclaredField(name);f.setAccessible(true);f.set(null,value);}
+    private static <T>T fx(Callable<T> action)throws Exception{FutureTask<T> task=new FutureTask<>(action);Platform.runLater(task);return task.get(20,TimeUnit.SECONDS);}
 }

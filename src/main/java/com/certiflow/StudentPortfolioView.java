@@ -1,138 +1,272 @@
 package com.certiflow;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.TextField;
+import java.util.Map;
+import javafx.application.Platform;
+import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 
-/** Imports local supporting documents into the student's saved portfolio. */
+/** Editable portfolio entries with supporting files and optional staff sharing. */
 public class StudentPortfolioView {
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("pdf", "png", "jpg", "jpeg", "gif", "webp", "txt");
     private final VBox view;
     private final TextField title = new TextField();
+    private final ComboBox<String> kind = new ComboBox<>();
+    private final TextArea description = new TextArea();
+    private final TextField link = new TextField();
     private final TextField search = new TextField();
-    private final VBox documents = new VBox(12);
-    private final Label selectedFile = Ui.muted("No file selected");
+    private final VBox entries = new VBox(14);
+    private final VBox pending = new VBox(8);
+    private final Label editorTitle = Ui.title("Add a portfolio entry");
     private final Label count = Ui.muted("");
     private final Label feedback = Ui.muted("");
-    private Path selectedPath;
+    private final Button save;
+    private final Button cancel;
+    private final RecipientPicker recipient;
+    private final List<Path> selected = new ArrayList<>();
+    private final Map<String, UploadResult> retryUploads = new HashMap<>();
+    private AppData.Project editing;
 
     public StudentPortfolioView() {
-        title.setId("portfolio-title");
-        title.setPromptText("Document title");
-        title.setAccessibleText("Portfolio document title");
-        Button choose = Ui.secondary("Choose document…", this::chooseFile);
+        title.setId("portfolio-title"); title.setPromptText("Project, certificate, or achievement title");
+        title.setAccessibleText("Portfolio entry title");
+        kind.setId("portfolio-kind"); kind.getItems().addAll(AppData.PROJECT_KINDS);
+        kind.setValue("Project"); kind.setMaxWidth(Double.MAX_VALUE); kind.setMinWidth(0);
+        kind.setAccessibleText("Portfolio entry category");
+        description.setId("portfolio-description"); description.setPromptText("What did you work on, learn, or achieve?");
+        description.setWrapText(true); description.setPrefRowCount(4);
+        description.setAccessibleText("Portfolio description");
+        link.setId("portfolio-link"); link.setPromptText("https://… (optional project or certificate link)");
+        link.setAccessibleText("Portfolio project link");
+        recipient = new RecipientPicker("portfolio", "Keep private",
+            "Private entries stay in your account. Choose staff to share this entry and its files with them; administrators can also review it.");
+        Button choose = Ui.secondary("Choose multiple files…", () -> chooseFiles(selected));
         choose.setId("portfolio-choose");
-        Button save = Ui.button("Add to portfolio", this::saveDocument);
-        save.setId("portfolio-save");
-        feedback.setId("portfolio-feedback");
-        feedback.setVisible(false);
-        feedback.setManaged(false);
-        VBox form = Ui.card(Ui.section("Add a document",
-                "PDF, image, or text files, up to 25 MB. A copy is saved with this app."),
-                Ui.text("Title"), title, choose, selectedFile, save, feedback);
+        save = Ui.button("Add portfolio entry", this::saveEntry); save.setId("portfolio-save");
+        cancel = Ui.secondary("Cancel editing", this::clearEditor); cancel.setId("portfolio-cancel");
+        cancel.setVisible(false); cancel.setManaged(false);
+        feedback.setId("portfolio-feedback"); feedback.setVisible(false); feedback.setManaged(false);
+        VBox form = Ui.card(editorTitle, Ui.muted("Show your work with projects, certificates, achievements, experience, and documents. Entries are marked as student-provided."),
+            Ui.text("Title"), title, Ui.text("Category"), kind, Ui.text("Description (optional)"), description,
+            Ui.text("Web link (optional)"), link, recipient,
+            Ui.text("Supporting files (optional)"), Ui.muted("Select several PDF, image, or text files. Maximum 25 MB per file."),
+            choose, pending, Ui.grid(2, 160, save, cancel), feedback);
         form.setId("portfolio-form-panel");
-        search.setId("portfolio-search");
-        search.setPromptText("Search document title or filename");
-        search.textProperty().addListener((observable, oldValue, newValue) -> refresh());
-        refresh();
-        VBox saved = new VBox(16, Ui.section("Saved documents", "Your portfolio files are kept with this app."),
-                search, count, documents);
-        saved.setId("portfolio-list-panel");
-        view = Ui.page("My Portfolios", "Portfolios", Ui.columns(form, saved));
+        search.setId("portfolio-search"); search.setPromptText("Search entries, descriptions, or filenames");
+        search.textProperty().addListener((observable, before, after) -> refresh());
+        refreshPending(); refresh();
+        VBox saved = new VBox(16, Ui.section("Your portfolio", "Build a collection that grows with your academic work."), search, count, entries);
+        saved.setMinWidth(0); saved.setId("portfolio-list-panel");
+        view = Ui.page("My portfolios", "Portfolios", Ui.columns(form, saved));
     }
 
-    private void chooseFile() {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Choose a portfolio document");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Documents and images",
-                "*.pdf", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.txt"));
-        File chosen = chooser.showOpenDialog(App.window());
-        if (chosen == null) {
-            return;
-        }
-        if (!allowed(chosen.getName())) {
-            Ui.feedback(feedback, "Choose a PDF, PNG, JPG, JPEG, GIF, WEBP, or TXT file.", false);
-            return;
-        }
-        selectedPath = chosen.toPath();
-        selectedFile.setText(chosen.getName());
-        if (title.getText().isBlank()) {
-            String name = chosen.getName();
-            int dot = name.lastIndexOf('.');
-            title.setText(dot > 0 ? name.substring(0, dot) : name);
+    private List<Path> pickFiles() {
+        FileChooser chooser = new FileChooser(); chooser.setTitle("Choose supporting portfolio files");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF, images and text",
+            "*.pdf", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.txt"));
+        List<File> files = chooser.showOpenMultipleDialog(App.window());
+        return files == null ? List.of() : files.stream().map(File::toPath).map(Path::toAbsolutePath).distinct().toList();
+    }
+
+    private void chooseFiles(List<Path> destination) {
+        for (Path path : pickFiles()) if (!destination.contains(path)) destination.add(path);
+        refreshPending();
+    }
+
+    private void refreshPending() {
+        pending.getChildren().clear();
+        if (selected.isEmpty()) pending.getChildren().add(Ui.muted("No files selected. You can save an entry with just its details or link."));
+        else for (Path path : List.copyOf(selected)) {
+            Button remove = Ui.secondary("Remove from selection", () -> { selected.remove(path); refreshPending(); });
+            pending.getChildren().add(new VBox(5, Ui.text(path.getFileName().toString()), remove));
         }
     }
 
-    private void saveDocument() {
-        if (selectedPath == null) {
-            Ui.feedback(feedback, "Choose a document before adding it to your portfolio.", false);
-            return;
+    private record UploadResult(AppData.Project project, List<Path> failed, List<String> errors, int saved) {}
+
+    private UploadResult upload(AppData.Project project, List<Path> files, AppData.User actor, Label progress) {
+        List<Path> failed = new ArrayList<>(); List<String> errors = new ArrayList<>(); int saved = 0;
+        for (int i = 0; i < files.size(); i++) {
+            Path path = files.get(i); int number = i + 1;
+            Platform.runLater(() -> Ui.feedback(progress, "Uploading file " + number + " of " + files.size() + ": " + path.getFileName(), true));
+            try {
+                String name = path.getFileName().toString(); int dot = name.lastIndexOf('.');
+                String documentTitle = dot > 0 ? name.substring(0, dot) : name;
+                App.data().addPortfolio(actor, documentTitle.substring(0, Math.min(150, documentTitle.length())), path, project.id());
+                saved++;
+            } catch (Exception error) { failed.add(path); errors.add(path.getFileName() + ": " + error.getMessage()); }
         }
-        if (!allowed(selectedPath.getFileName().toString())) {
-            Ui.feedback(feedback, "This file type is not supported.", false);
-            return;
-        }
-        try {
-            AppData.PortfolioItem item = App.data().addPortfolio(App.user(), title.getText(), selectedPath);
-            title.clear();
-            selectedPath = null;
-            selectedFile.setText("No file selected");
-            search.clear();
-            refresh();
-            Ui.feedback(feedback, "Saved “" + item.title() + "” to your portfolio.", true);
-        } catch (IOException | IllegalArgumentException | IllegalStateException exception) {
-            Ui.feedback(feedback, exception.getMessage(), false);
-        }
+        return new UploadResult(project, List.copyOf(failed), List.copyOf(errors), saved);
+    }
+
+    private void saveEntry() {
+        String entryTitle = title.getText(), entryKind = kind.getValue(), entryDescription = description.getText(), entryLink = link.getText(), recipientId = recipient.recipientId();
+        AppData.Project existing = editing; List<Path> files = List.copyOf(selected); AppData.User actor = App.user();
+        Ui.feedback(feedback, "Saving your portfolio entry…", true);
+        Background.run(view, () -> {
+            AppData.Project project = existing == null
+                ? App.data().createProject(actor, entryTitle, entryKind, entryDescription, entryLink, recipientId)
+                : App.data().updateProject(existing, entryTitle, entryKind, entryDescription, entryLink, recipientId);
+            return upload(project, files, actor, feedback);
+        }, result -> {
+            if (result.failed().isEmpty()) {
+                clearEditor(); search.clear(); refresh();
+                Ui.feedback(feedback, "Portfolio entry saved" + (result.saved() == 0 ? "." : " with " + result.saved() + " file(s)."), true);
+            } else {
+                editing = result.project(); setEditingState(true); selected.clear(); selected.addAll(result.failed()); refreshPending(); refresh();
+                Ui.feedback(feedback, failureMessage(result), false);
+            }
+        }, error -> Ui.feedback(feedback, error.getMessage(), false));
+    }
+
+    private static String failureMessage(UploadResult result) {
+        return "Entry saved. " + result.saved() + " file(s) uploaded; " + result.failed().size()
+            + " failed. Only failed files remain for retry.\n" + String.join("\n", result.errors().stream().limit(3).toList());
+    }
+
+    private void clearEditor() {
+        editing = null; title.clear(); kind.setValue("Project"); description.clear(); link.clear(); recipient.select("");
+        selected.clear(); refreshPending(); setEditingState(false);
+    }
+
+    private void setEditingState(boolean isEditing) {
+        editorTitle.setText(isEditing ? "Edit portfolio entry" : "Add a portfolio entry");
+        save.setText(isEditing ? "Save changes" : "Add portfolio entry");
+        cancel.setVisible(isEditing); cancel.setManaged(isEditing);
+    }
+
+    private void edit(AppData.Project project) {
+        if (editorDirty() && !Ui.confirm("Discard the unsaved changes in the entry form and edit “" + project.title() + "”?")) return;
+        editing = project; title.setText(project.title()); kind.setValue(project.kind()); description.setText(project.description());
+        link.setText(project.link()); recipient.select(project.recipientId()); selected.clear(); refreshPending(); setEditingState(true);
+        feedback.setVisible(false); feedback.setManaged(false);
+        ScrollPane scroll = (ScrollPane) view.lookup("#page-scroll"); if (scroll != null) scroll.setVvalue(0);
+        title.requestFocus();
+    }
+
+    private boolean editorDirty() {
+        if (!selected.isEmpty()) return true;
+        if (editing == null) return !title.getText().isBlank() || !description.getText().isBlank() || !link.getText().isBlank()
+            || !"Project".equals(kind.getValue()) || !recipient.recipientId().isBlank();
+        return !title.getText().equals(editing.title()) || !description.getText().equals(editing.description())
+            || !link.getText().equals(editing.link()) || !java.util.Objects.equals(kind.getValue(), editing.kind())
+            || !recipient.recipientId().equals(editing.recipientId() == null ? "" : editing.recipientId());
     }
 
     private void refresh() {
         String query = search.getText().trim().toLowerCase(Locale.ROOT);
-        List<AppData.PortfolioItem> matches = App.data().portfoliosFor(App.user().id()).stream()
-                .filter(item -> (item.title() + " " + item.fileName()).toLowerCase(Locale.ROOT).contains(query))
-                .toList();
-        documents.getChildren().clear();
-        count.setText(matches.size() + (matches.size() == 1 ? " document" : " documents"));
-        if (matches.isEmpty()) {
-            documents.getChildren().add(Ui.muted(query.isEmpty()
-                    ? "No documents yet. Add your first portfolio document above."
-                    : "No documents match your search."));
-        } else {
-            for (AppData.PortfolioItem item : matches) {
-                documents.getChildren().add(Ui.card(Ui.text(item.title()),
-                        Ui.muted(item.fileName() + " • Added " + Ui.date(item.addedAt())),
-                        Ui.secondary("Open document", () -> openDocument(item))));
-            }
+        List<AppData.Project> projects = App.data().projectsFor(App.user().id());
+        List<AppData.PortfolioItem> files = App.data().portfoliosFor(App.user().id());
+        entries.getChildren().clear(); int matches = 0;
+        for (AppData.Project project : projects) {
+            List<AppData.PortfolioItem> attachments = files.stream().filter(f -> project.id().equals(f.projectId())).toList();
+            String searchable = project.title() + " " + project.kind() + " " + project.description() + " "
+                + String.join(" ", attachments.stream().map(f -> f.title() + " " + f.fileName()).toList());
+            if (!searchable.toLowerCase(Locale.ROOT).contains(query)) continue;
+            entries.getChildren().add(projectCard(project, attachments)); matches++;
         }
+        List<AppData.PortfolioItem> ungrouped = files.stream().filter(f -> f.projectId() == null || f.projectId().isBlank())
+            .filter(f -> (f.title() + " " + f.fileName()).toLowerCase(Locale.ROOT).contains(query)).toList();
+        if (!ungrouped.isEmpty()) {
+            VBox legacy = Ui.card(Ui.title("Individual documents"), Ui.muted("Your earlier documents are still saved privately."));
+            ungrouped.forEach(f -> legacy.getChildren().add(fileCard(f)));
+            entries.getChildren().add(legacy);
+        }
+        count.setText(projects.size() + " entries · " + files.size() + " supporting files");
+        if (matches == 0 && ungrouped.isEmpty()) entries.getChildren().add(Ui.card(Ui.title(query.isEmpty() ? "Your next achievement belongs here" : "No matching entries"),
+            Ui.muted(query.isEmpty() ? "Start with a project, a certificate, or something you are proud of. Add a description, a link, or supporting files whenever you are ready." : "Try another title, category, or filename.")));
+    }
+
+    private VBox projectCard(AppData.Project project, List<AppData.PortfolioItem> files) {
+        VBox card = Ui.card(Ui.title(project.title()), Ui.muted(project.kind() + " · " + Ui.date(project.createdAt())),
+            Ui.muted("Student-provided content · achievements are not independently verified"),
+            Ui.muted(project.recipientId() == null || project.recipientId().isBlank() ? "Private · visible to you and administrators" : "Shared with " + App.data().contactName(project.recipientId()) + " and administrators"));
+        card.setId("portfolio-entry-" + project.id());
+        if (!project.description().isBlank()) card.getChildren().add(Ui.text(project.description()));
+        if (!project.link().isBlank()) card.getChildren().add(Ui.secondary("Open project link", () -> App.openWebLink(project.link())));
+        if (project.recipientId() != null && !project.recipientId().isBlank()) card.getChildren().add(Ui.messageContact("Message assigned staff", project.recipientId()));
+        Button edit = Ui.secondary("Edit entry", () -> edit(project)); edit.setId("portfolio-edit-" + project.id());
+        Button add = Ui.secondary("Add files…", () -> addFiles(project)); add.setId("portfolio-add-files-" + project.id());
+        Button remove = Ui.secondary("Delete entry", () -> removeProject(project)); remove.setId("portfolio-delete-" + project.id()); remove.getStyleClass().add("danger-button");
+        card.getChildren().add(Ui.grid(3, 140, edit, add, remove));
+        card.getChildren().add(SharingControls.forProject(project));
+        UploadResult retry = retryUploads.get(project.id());
+        if (retry != null) {
+            Button retryButton = Ui.button("Retry failed files only", () -> uploadToProject(project, retry.failed()));
+            retryButton.setId("portfolio-retry-" + project.id());
+            Button dismiss = Ui.secondary("Dismiss failed selection", () -> { retryUploads.remove(project.id()); refresh(); });
+            card.getChildren().add(Ui.card(Ui.text(failureMessage(retry)), retryButton, dismiss));
+        }
+        card.getChildren().add(Ui.muted(files.size() + " supporting file(s)"));
+        files.forEach(file -> card.getChildren().add(fileCard(file)));
+        return card;
+    }
+
+    private void addFiles(AppData.Project project) {
+        List<Path> paths = pickFiles(); if (paths.isEmpty()) return;
+        UploadResult previous = retryUploads.get(project.id());
+        if (previous != null) {
+            List<Path> combined = new ArrayList<>(previous.failed());
+            for (Path path : paths) if (!combined.contains(path)) combined.add(path);
+            paths = List.copyOf(combined);
+        }
+        uploadToProject(project, paths);
+    }
+
+    private void uploadToProject(AppData.Project project, List<Path> paths) {
+        AppData.User actor = App.user(); Ui.feedback(feedback, "Uploading supporting files…", true);
+        Background.run(view, () -> upload(project, paths, actor, feedback), result -> {
+            if (result.failed().isEmpty()) { retryUploads.remove(project.id()); Ui.feedback(feedback, result.saved() + " supporting file(s) added.", true); }
+            else {
+                retryUploads.put(project.id(), result); Ui.feedback(feedback, failureMessage(result), false);
+            }
+            refresh();
+        }, error -> Ui.feedback(feedback, error.getMessage(), false));
+    }
+
+    private void removeProject(AppData.Project project) {
+        if (!Ui.confirm("Delete “" + project.title() + "” and all its supporting files? This cannot be undone.")) return;
+        Background.run(view, () -> { App.data().deleteProject(project); return true; }, ignored -> {
+            if (editing != null && editing.id().equals(project.id())) clearEditor(); retryUploads.remove(project.id()); refresh();
+            Ui.feedback(feedback, "Portfolio entry deleted.", true);
+        }, error -> {
+            if (App.data().projects().stream().noneMatch(p -> p.id().equals(project.id()))) {
+                if (editing != null && editing.id().equals(project.id())) clearEditor(); retryUploads.remove(project.id());
+            }
+            refresh(); Ui.feedback(feedback, error.getMessage(), false);
+        });
+    }
+
+    private VBox fileCard(AppData.PortfolioItem item) {
+        TextField rename = new TextField(item.title()); rename.setId("portfolio-file-title-" + item.id()); rename.setAccessibleText("Document title");
+        Label status = Ui.muted(""); status.setVisible(false); status.setManaged(false);
+        VBox editor = new VBox(8); editor.setVisible(false); editor.setManaged(false);
+        Button saveName = Ui.button("Save title", () -> {
+            String value = rename.getText();
+            Background.run(view, () -> App.data().updatePortfolio(item, value), updated -> refresh(), error -> Ui.feedback(status, error.getMessage(), false));
+        });
+        editor.getChildren().addAll(rename, saveName, status);
+        Button open = Ui.secondary("Open", () -> openDocument(item)); open.setId("portfolio-open-" + item.id());
+        Button renameButton = Ui.secondary("Rename", () -> { editor.setVisible(!editor.isVisible()); editor.setManaged(editor.isVisible()); });
+        renameButton.setId("portfolio-rename-" + item.id());
+        Button remove = Ui.secondary("Remove", () -> {
+            if (!Ui.confirm("Permanently remove “" + item.title() + "” from your portfolio?")) return;
+            Background.run(view, () -> { App.data().removePortfolio(item); return true; }, ignored -> {
+                refresh(); Ui.feedback(feedback, "Document removed.", true);
+            }, error -> { refresh(); Ui.feedback(feedback, error.getMessage(), false); });
+        });
+        remove.setId("portfolio-remove-" + item.id()); remove.getStyleClass().add("danger-button");
+        return Ui.card(Ui.text(item.title()), Ui.muted(item.fileName() + " · " + Ui.date(item.addedAt())), Ui.grid(3, 90, open, renameButton, remove), editor);
     }
 
     private void openDocument(AppData.PortfolioItem item) {
-        if (!allowed(item.fileName())) {
-            Ui.error("This document type cannot be opened from Certiflow.");
-            return;
-        }
-        Path path = App.data().portfolioPath(item);
-        if (!allowed(path.getFileName().toString()) || !Files.isRegularFile(path)) {
-            Ui.error("The saved document is missing or has an unsupported file type. Add it again from the original file.");
-            return;
-        }
-        App.openFile(path);
+        Background.run(view, () -> App.data().downloadPortfolio(item), App::openFile, error -> Ui.error(error.getMessage()));
     }
 
-    private static boolean allowed(String fileName) {
-        int dot = fileName.lastIndexOf('.');
-        return dot >= 0 && ALLOWED_EXTENSIONS.contains(fileName.substring(dot + 1).toLowerCase(Locale.ROOT));
-    }
-
-    public VBox getView() {
-        return view;
-    }
+    public VBox getView() { return view; }
 }

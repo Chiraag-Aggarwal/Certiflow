@@ -20,7 +20,7 @@ if errorlevel 1 goto :build_failed
 if not exist "target\classes\com\certiflow\App.class" goto :missing_classes
 
 echo Opening Certiflow...
-start "Certiflow" /D "%PROJECT_DIR%" "%JAVA_HOME%\bin\javaw.exe" -Dfile.encoding=UTF-8 -Dcertiflow.data.dir=data --module-path "lib\javafx" --add-modules javafx.controls,javafx.fxml --class-path "target\classes;lib\ikonli\*" com.certiflow.App >>"logs\runtime.log" 2>&1
+start "Certiflow" /D "%PROJECT_DIR%" "%JAVA_HOME%\bin\javaw.exe" -Dfile.encoding=UTF-8 -Dcertiflow.data.dir=data --module-path "lib\javafx" --add-modules javafx.controls,javafx.fxml --class-path "target\classes;lib\ikonli\*;lib\cloud\*" com.certiflow.App >>"logs\runtime.log" 2>&1
 if errorlevel 1 goto :launch_failed
 exit /b 0
 

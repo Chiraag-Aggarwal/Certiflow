@@ -1,0 +1,33 @@
+.chat-workspace { -fx-hgap: 18px; -fx-vgap: 16px; }
+.chat-page .page-title { -fx-font-size: 20px; }
+.chat-page .chat-people, .chat-page .chat-conversation { -fx-padding: 16px; -fx-spacing: 8px; }
+.chat-page:compact .chat-people, .chat-page:compact .chat-conversation { -fx-padding: 12px; }
+.chat-history-status { -fx-font-size: 11px; }
+.chat-settings-overlay { -fx-background-color: rgba(20, 29, 24, 0.42); -fx-padding: 12px; -fx-background-radius: 16px; }
+.chat-settings-overlay .app-card { -fx-padding: 16px; }
+.chat-inbox-item {
+    -fx-background-color: transparent; -fx-background-radius: 12px; -fx-border-color: transparent;
+    -fx-border-radius: 12px; -fx-padding: 12px; -fx-alignment: center-left; -fx-cursor: hand;
+}
+.chat-inbox-item:hover { -fx-background-color: -cf-soft; }
+.chat-inbox-item:selected, .chat-inbox-item.chat-selected { -fx-background-color: -cf-tint; -fx-border-color: -cf-accent; }
+.chat-inbox-item .app-text { -fx-font-weight: bold; }
+.chat-preview { -fx-font-size: 12px; -fx-text-fill: -cf-muted; }
+.chat-avatar { -fx-background-color: -cf-tint; -fx-background-radius: 22px; -fx-text-fill: -cf-accent; -fx-font-weight: bold; -fx-alignment: center; }
+.chat-unread { -fx-background-color: -cf-accent; -fx-text-fill: -cf-primary-text; -fx-background-radius: 18px; -fx-padding: 3px 7px; -fx-font-size: 11px; -fx-font-weight: bold; }
+.chat-day { -fx-background-color: -cf-soft; -fx-text-fill: -cf-muted; -fx-background-radius: 14px; -fx-padding: 5px 12px; -fx-font-size: 11px; }
+.chat-transcript { -fx-padding: 8px 4px; }
+.chat-workspace .message-bubble { -fx-padding: 12px 15px; -fx-spacing: 7px; -fx-effect: null; }
+.chat-workspace .message-outgoing { -fx-background-color: -cf-tint; }
+.chat-sender { -fx-text-fill: -cf-accent; -fx-font-size: 11px; -fx-font-weight: bold; }
+.chat-message-meta { -fx-text-fill: -cf-muted; -fx-font-size: 10px; }
+.chat-workspace .chat-edit-button { -fx-padding: 3px 8px; -fx-background-color: transparent; -fx-border-color: transparent; -fx-text-fill: -cf-accent; -fx-font-size: 11px; }
+.chat-workspace .chat-edit-button:hover { -fx-background-color: -cf-soft; }
+.chat-edit-notice { -fx-background-color: -cf-warn-bg; -fx-background-radius: 9px; -fx-padding: 10px; -fx-text-fill: -cf-warn; }
+.chat-settings > .title { -fx-background-color: -cf-soft; -fx-background-radius: 9px; -fx-padding: 10px; }
+.chat-settings > .title .text { -fx-fill: -cf-text; }
+.chat-settings > .content { -fx-background-color: -cf-surface; -fx-border-color: -cf-border; -fx-padding: 12px; }
+.chat-settings .check-box { -fx-text-fill: -cf-text; -fx-font-size: 12px; }
+.chat-compact .message-bubble { -fx-padding: 8px 12px; -fx-spacing: 3px; }
+.chat-large-text .message-bubble .chat-message-body { -fx-font-size: 17px; }
+.chat-large-text #message-body { -fx-font-size: 17px; }
