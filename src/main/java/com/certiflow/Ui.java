@@ -52,6 +52,7 @@ public final class Ui {
         return root;
     }
 
+    /** Shared signed-in shell: header, drawer, page content and narrow-window navigation. */
     public static VBox page(String heading, String active, Node... content) {
         VBox root = new VBox();
         root.setMinSize(0, 0);
@@ -115,7 +116,11 @@ public final class Ui {
         HBox.setHgrow(headerSpace, Priority.ALWAYS);
         Label account = muted(App.user().name());
         account.getStyleClass().add("topbar-account");
-        HBox topbar = row(menu, brand("header-logo"), headerSpace, account);
+        Button fullScreen = iconButton("fullscreen", "Toggle full screen • F11", () -> {
+            if(App.window()!=null) App.window().setFullScreen(!App.window().isFullScreen());
+        });
+        fullScreen.setId("fullscreen-toggle");
+        HBox topbar = row(menu, brand("header-logo"), headerSpace, account, fullScreen);
         topbar.setId("app-topbar");
         topbar.getStyleClass().add("app-topbar");
         topbar.setMinHeight(Region.USE_PREF_SIZE);
@@ -139,7 +144,7 @@ public final class Ui {
         VBox body = new VBox(24, pageHeading);
         body.setId("page-content");
         body.setMinWidth(0);
-        body.setMaxWidth(1320);
+        body.setMaxWidth(1480);
         body.getChildren().addAll(content);
         VBox contentWrapper = new VBox(body);
         contentWrapper.setMinWidth(0);
@@ -206,6 +211,7 @@ public final class Ui {
             body.setSpacing(compact ? 20 : 24);
             topbar.setSpacing(compact ? 8 : 14);
             topbar.setPadding(new Insets(compact ? 12 : 16, compact ? 12 : 28, compact ? 12 : 16, compact ? 12 : 28));
+            // JavaFX nodes can have only one parent: move the same buttons between layouts.
             if (!initialized[0] || wasDesktop[0] != desktop) {
                 desktopNavigation.getChildren().clear();
                 mobileNavigation.getChildren().clear();
@@ -346,10 +352,13 @@ public final class Ui {
         return card;
     }
     public static VBox welcome(String heading, String subtitle) {
-        VBox copy = section(heading, subtitle);
+        Label eyebrow=muted(java.time.LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM")) + "  ·  YOUR WORKSPACE");
+        eyebrow.getStyleClass().add("hero-eyebrow");
+        Label headline=title(heading); headline.getStyleClass().add("hero-title");
+        VBox copy = new VBox(12,eyebrow,headline,muted(subtitle));
         copy.setMinWidth(0);
         HBox.setHgrow(copy, Priority.ALWAYS);
-        ImageView books = AcademicArt.books(142);
+        ImageView books = AcademicArt.books(190);
         HBox artwork = new HBox(6, AcademicArt.sparkle(), books);
         artwork.setAlignment(Pos.CENTER);
         artwork.setMouseTransparent(true);
@@ -357,11 +366,11 @@ public final class Ui {
         line.setFillHeight(false);
         line.setAlignment(Pos.CENTER_LEFT);
         line.setMinWidth(0);
-        VBox welcome = new VBox(line);
+        VBox welcome = new VBox(16,line);
         welcome.getStyleClass().add("welcome-banner");
         welcome.widthProperty().addListener((observable, before, after) -> {
             boolean wide = after.doubleValue() >= 560;
-            books.setFitWidth(wide ? 142 : 72);
+            books.setFitWidth(wide ? 190 : 66);
             artwork.getChildren().get(0).setVisible(wide);
             artwork.getChildren().get(0).setManaged(wide);
         });

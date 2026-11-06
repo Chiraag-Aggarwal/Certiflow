@@ -18,6 +18,7 @@ import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import javafx.stage.Screen;
 
+/** Owns the desktop window, account routing and bounded in-session back history. */
 public class App extends Application {
     private static App instance;
     private static Stage primaryStage;
@@ -39,6 +40,7 @@ public class App extends Application {
         try {
             Path directory = Path.of(System.getProperty("certiflow.data.dir", "data")).toAbsolutePath().normalize();
             Files.createDirectories(directory.getParent());
+            // Lock beside the data folder so two app instances cannot race on local preferences.
             lockChannel = FileChannel.open(directory.resolveSibling("." + directory.getFileName() + ".lock"),
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE);
             dataLock = lockChannel.tryLock();
@@ -49,7 +51,10 @@ public class App extends Application {
                 if (icon != null) stage.getIcons().add(new Image(icon));
             }
             showOptionView();
+            stage.setMaximized(true);
             stage.show();
+            stage.setFullScreenExitHint("Press Esc to leave full screen. Press F11 to switch back.");
+            stage.setFullScreen(true);
         } catch (Exception ex) {
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle("Certiflow could not start");
@@ -69,6 +74,7 @@ public class App extends Application {
         return currentUser;
     }
     public static Stage window() { return primaryStage; }
+    // Reuse one Scene: window size, stylesheets and the F11 handler survive page changes.
     private static void show(Parent root) {
         UiSettings.decorate(root);
         if (primaryStage.getScene() == null) {
@@ -76,6 +82,12 @@ public class App extends Application {
             double width = Math.max(320, Math.min(1240, available.getWidth() - 64));
             double height = Math.max(360, Math.min(800, available.getHeight() - 110));
             Scene scene = new Scene(root, width, height);
+            scene.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, event -> {
+                if (event.getCode() == javafx.scene.input.KeyCode.F11) {
+                    primaryStage.setFullScreen(!primaryStage.isFullScreen());
+                    event.consume();
+                }
+            });
             scene.getStylesheets().add(App.class.getResource("/style.css").toExternalForm());
             scene.getStylesheets().add(App.class.getResource("/auth.css").toExternalForm());
             scene.getStylesheets().add(App.class.getResource("/chat.css").toExternalForm());
@@ -88,6 +100,7 @@ public class App extends Application {
             fade.play();
         }
     }
+    // The legacy role argument never grants access; authenticate reads the stored server role.
     public static boolean login(AppData.Role role, String username, String password) throws IOException {
         var account = data.authenticate(username, password);
         if (account.isEmpty()) return false;
@@ -115,6 +128,7 @@ public class App extends Application {
             backHistory.push(route); goBack();
         }, error -> Ui.error(error.getMessage()));
     }
+    /** Select the workspace from the authenticated profile, not a login-page choice. */
     public static void showHome() {
         if (currentUser == null) showOptionView();
         else if (currentUser.role() == AppData.Role.STUDENT) showStudentDashboard();
@@ -183,6 +197,7 @@ public class App extends Application {
         canReturn.set(false);
     }
 
+    // Store route names rather than entire views, avoiding retained forms and stale account data.
     private static void navigate(String route, Supplier<Parent> view) {
         if (!returning && currentRoute != null && !route.equals(currentRoute)) {
             backHistory.push(currentRoute);

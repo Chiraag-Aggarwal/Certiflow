@@ -112,7 +112,10 @@ public class StudentNocView {
         }
         if (request.recipientId() != null && !request.recipientId().isBlank())
             card.getChildren().add(Ui.messageContact("Message assigned staff", request.recipientId()));
-        if (request.studentId().equals(App.user().id())) card.getChildren().add(SharingControls.forRequest(request));
+        if (request.studentId().equals(App.user().id())) {
+            card.getChildren().add(PrivateRemarks.forRequest(request));
+            card.getChildren().add(SharingControls.forRequest(request));
+        }
         return card;
     }
 

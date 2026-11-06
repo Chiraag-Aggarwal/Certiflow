@@ -25,13 +25,6 @@ public class TeacherHomeView {
                 Ui.statistic("Last 7 days", Long.toString(recent), "New submissions", "stat-neutral"));
         summary.setId("teacher-statistics");
 
-        GridPane actions = Ui.actions(
-                Ui.button("Review requests", App::showTeacherDashboard),
-                Ui.secondary("Shared portfolios", App::showSharedPortfolios),
-                Ui.secondary("Messages", App::showMessages),
-                Ui.secondary("Student list", App::showTeacherStudentList),
-                Ui.secondary("Export report", App::showTeacherReportExport));
-
         VBox activity = new VBox(12);
         requests.stream().sorted(Comparator.comparing(TeacherHomeView::activityDate).reversed())
                 .limit(5).forEach(request -> activity.getChildren().add(Ui.card(
@@ -39,14 +32,12 @@ public class TeacherHomeView {
                         Ui.muted(request.id() + " · " + Ui.date(activityDate(request))),
                         Ui.status(request.status()))));
         if (activity.getChildren().isEmpty()) {
-            activity.getChildren().add(Ui.muted("No applications yet. Submitted NOC requests will appear here."));
+            activity.getChildren().add(WorkspaceCards.empty("A clear desk, a fresh start", "New applications and review decisions will appear here when students submit their work.","requests"));
         }
 
         String heading = App.user().role() == AppData.Role.ADMIN ? "Admin overview" : "Teacher home";
         VBox recentActivity = new VBox(16, Ui.section("Recent activity", "The latest applications and review decisions."),
                 activity, Ui.secondary("View decision history", App::showTeacherHistory));
-        VBox quickActions = Ui.card(Ui.section("Quick actions", "Keep student applications moving."), actions,
-                Ui.muted("Decisions appear in student history as soon as they are saved."));
         long directlyAssigned = requests.stream().filter(request -> App.user().id().equals(request.recipientId()))
                 .filter(request -> request.status() == AppData.Status.PENDING).count();
         VBox inbox = Ui.card(Ui.section("Your review workspace", "A clear view of what needs attention."),
@@ -68,7 +59,7 @@ public class TeacherHomeView {
         }
         view = Ui.page(heading, "Home",
                 Ui.welcome("Welcome, " + App.user().name(), "Review student applications and track their decisions."),
-                summary, Ui.columns(recentActivity, quickActions), Ui.columns(inbox, guidance));
+                summary, WorkspaceCards.shortcuts(), Ui.columns(recentActivity, inbox), guidance);
     }
 
     private static LocalDateTime activityDate(AppData.NocRequest request) {

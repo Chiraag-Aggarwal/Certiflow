@@ -189,6 +189,7 @@ class UiFlowTest {
             backend.role=role;var user=data.authenticate("account0@example.invalid","long-password-test").orElseThrow();
             fx(()->{App.completeLogin(user);return null;});
             var pages=new java.util.ArrayList<PageCase>();
+            pages.add(new PageCase("home",App::showHome));
             if(role==AppData.Role.STUDENT) {
                 pages.add(new PageCase("portfolio",App::showStudentPortfolio));pages.add(new PageCase("noc",App::showStudentNoc));
                 pages.add(new PageCase("profile",App::showStudentProfile));
@@ -205,9 +206,38 @@ class UiFlowTest {
                     resize(width,844);assertHorizontalFit(stage.getScene().getRoot(),width);assertNoDemoText(stage.getScene().getRoot());
                     if(width==390||width==1366)capture(role.name().toLowerCase()+"-"+page.name()+"-"+width);
                 }
+                if(page.name().equals("home")) {
+                    resize(1920,1080);assertHorizontalFit(stage.getScene().getRoot(),1920);capture(role.name().toLowerCase()+"-home-1920");
+                    UiSettings.dark.set(true);resize(1366,844);assertHorizontalFit(stage.getScene().getRoot(),1366);capture(role.name().toLowerCase()+"-home-dark-1366");
+                    UiSettings.dark.set(false);
+                }
                 App.showHome();return null;
             });
         }
+    }
+    @Test void privateRemarkComposerSendsAndPreservesDraftOnFailureWhileStudentsOnlyRead() throws Exception {
+        backend.role=AppData.Role.ADMIN;
+        var admin=data.authenticate("account0@example.invalid","long-password-test").orElseThrow();
+        String item=TestBackend.TEACHER_ID;
+        var request=new AppData.NocRequest(item,TestBackend.ID,"Registered student","Scholarship","Reason",AppData.Status.PENDING,java.time.LocalDateTime.now(),null,"");
+        fx(()->{App.completeLogin(admin);var root=Ui.page("Private feedback","Requests",PrivateRemarks.forRequest(request));UiSettings.decorate(root);stage.getScene().setRoot(root);resize(390,844);control("private-remarks-"+item,TitledPane.class).setExpanded(true);return null;});
+        await(()->backend.calls.stream().anyMatch(c->c.contains("/private_remarks?"))&&!control("private-remarks-"+item,TitledPane.class).getContent().isDisabled());
+        fx(()->{control("remark-draft-"+item,TextArea.class).setText("Please attach the internship confirmation letter.");button("remark-send-"+item).fire();return null;});
+        await(()->!backend.remarks.isEmpty()&&control("remark-draft-"+item,TextArea.class).getText().isEmpty());
+        fx(()->{assertTrue(containsText(control("remark-history-"+item,VBox.class),"Please attach the internship confirmation letter."));
+            for(int width:new int[]{320,390,1366}){resize(width,900);assertHorizontalFit(stage.getScene().getRoot(),width);if(width!=320)capture("staff-private-remarks-"+width);}return null;});
+        backend.remarksUnavailable=true;
+        fx(()->{control("remark-draft-"+item,TextArea.class).setText("Keep this unsent draft.");button("remark-send-"+item).fire();return null;});
+        await(()->label("remark-feedback-"+item).getStyleClass().contains("feedback-error"));
+        fx(()->{assertEquals("Keep this unsent draft.",control("remark-draft-"+item,TextArea.class).getText());return null;});
+        backend.remarksUnavailable=false;backend.role=AppData.Role.STUDENT;
+        var student=data.authenticate("account0@example.invalid","long-password-test").orElseThrow();
+        fx(()->{App.completeLogin(student);var root=Ui.page("My feedback","NOC",PrivateRemarks.forRequest(request));UiSettings.decorate(root);stage.getScene().setRoot(root);resize(390,844);
+            assertNull(stage.getScene().lookup("#remark-draft-"+item));control("private-remarks-"+item,TitledPane.class).setExpanded(true);return null;});
+        await(()->containsText(control("remark-history-"+item,VBox.class),"Please attach the internship confirmation letter."));
+        fx(()->{assertNull(stage.getScene().lookup("#remark-send-"+item));assertHorizontalFit(stage.getScene().getRoot(),390);capture("student-private-remarks-390");return null;});
+        backend.role=AppData.Role.VIEWER;var viewer=data.authenticate("account0@example.invalid","long-password-test").orElseThrow();
+        fx(()->{App.completeLogin(viewer);assertFalse(containsText(stage.getScene().getRoot(),"Private remarks"));return null;});
     }
     @Test void onlyFoundingAdminSeesAdministratorRoleChoicesAndSelfAccessHasNoControls() throws Exception {
         String student="00000000-0000-4000-8000-000000000002",otherAdmin="00000000-0000-4000-8000-000000000003";

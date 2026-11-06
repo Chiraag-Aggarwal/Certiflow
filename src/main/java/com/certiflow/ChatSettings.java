@@ -30,6 +30,7 @@ record ChatSettings(boolean enterToSend, boolean compact, boolean largeText, boo
         Files.createDirectories(target.getParent());
         try {
             try (var output = Files.newOutputStream(temporary)) { values.store(output, "Certiflow chat preferences"); }
+            // Replace a complete file so interrupted writes do not destroy the last preferences.
             try { Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
             catch (AtomicMoveNotSupportedException ex) { Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING); }
         } finally { Files.deleteIfExists(temporary); }
@@ -39,6 +40,7 @@ record ChatSettings(boolean enterToSend, boolean compact, boolean largeText, boo
         return Boolean.parseBoolean(values.getProperty(key, Boolean.toString(fallback)));
     }
     private static Path file(Path directory, String accountId) {
+        // Separate each account's settings and reject path characters through UUID parsing.
         return directory.toAbsolutePath().normalize().resolve("chat-" + UUID.fromString(accountId) + ".properties");
     }
 }

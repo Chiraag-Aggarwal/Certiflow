@@ -1,4 +1,5 @@
 "use strict";
+// This browser client has only a publishable key. SQL RPCs and storage policies enforce access.
 const PROJECT_URL="https://eudohdwwzaqotjxiehqe.supabase.co";
 const PUBLIC_KEY="sb_publishable_4mcpdqeCz1Jej8i40r-ZIw_cMVaEuBB";
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -9,6 +10,7 @@ function safeLink(value){try{const u=new URL(value);return ["http:","https:"].in
 async function request(url,options){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);try{return await fetch(url,{...options,signal:controller.signal});}finally{clearTimeout(timer);}}
 function showState(title,copy,retry=false){$("state").hidden=false;$("publication").hidden=true;$("state-title").textContent=title;$("state-copy").textContent=copy;$("retry").hidden=!retry;document.title="Shared work · Certiflow";}
 async function load(){
+  // Keep the token in the fragment; ignore an older response if navigation changes it mid-request.
   const version=++requestVersion;currentToken=location.hash.slice(1).trim();
   if(!currentToken){showState("A place for work worth sharing.","Open a public link shared by a Certiflow student to view their project, achievements, or application summary.");return;}
   if(!UUID.test(currentToken)){showState("This link isn’t valid.","Check that you copied the full public link from Certiflow, or ask the student for a new one.");return;}
@@ -21,6 +23,7 @@ async function load(){
   }catch{if(version===requestVersion)showState("We couldn’t open this publication.","Check your connection and try again. The sharing service may be temporarily unavailable.",true);}
 }
 function render(item){
+  // Publication fields are untrusted text. Never interpolate them as HTML.
   $("state").hidden=true;$("publication").hidden=false;$("title").textContent=item.title||"Shared work";document.title=(item.title||"Shared work")+" · Certiflow";
   $("category").textContent=item.source_kind==="NOC"?"NOC APPLICATION · "+(item.category||""):(item.category||"STUDENT WORK");
   let date="";if(item.published_at){const d=new Date(item.published_at);if(!Number.isNaN(d.getTime()))date=" · "+new Intl.DateTimeFormat(undefined,{dateStyle:"medium"}).format(d);}

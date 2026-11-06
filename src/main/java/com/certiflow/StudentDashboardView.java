@@ -33,9 +33,9 @@ public class StudentDashboardView {
                     .toList();
             recentList.getChildren().clear();
             if (matches.isEmpty()) {
-                recentList.getChildren().add(Ui.muted(query.isEmpty()
-                        ? "You have no applications yet. Create one using New NOC application."
-                        : "No applications match your search."));
+                recentList.getChildren().add(WorkspaceCards.empty(query.isEmpty()?"Your next step starts here":"No matching applications", query.isEmpty()
+                        ? "Planning an internship, scholarship or event? Open applications to send your first NOC request."
+                        : "Try another type or request ID.","noc"));
             } else {
                 matches.stream().limit(3)
                         .forEach(request -> recentList.getChildren().add(StudentNocView.requestCard(request)));
@@ -49,11 +49,6 @@ public class StudentDashboardView {
 
         VBox recent = new VBox(16, Ui.section("Recent NOC applications", "Follow the progress of your latest requests."),
                 search, recentList, Ui.secondary("All applications", App::showStudentNoc));
-        VBox actions = Ui.card(Ui.section("Quick actions", "Start a request or keep your documents together."),
-                Ui.actions(Ui.button("New NOC application", App::showStudentNoc),
-                        Ui.secondary("My portfolios", App::showStudentPortfolio),
-                        Ui.secondary("Message a teacher", App::showMessages)),
-                Ui.muted(documentCount + (documentCount == 1 ? " saved portfolio document" : " saved portfolio documents")));
 
         int completion = TeacherProfileView.completion(App.user());
         ProgressBar progress = new ProgressBar(completion / 100.0);
@@ -77,7 +72,7 @@ public class StudentDashboardView {
                 Ui.muted("Choose a registered teacher on a portfolio entry or NOC application to send it directly to them. Use Messages for questions and follow-ups."));
         view = Ui.page("Student Home", "Home",
                 Ui.welcome("Welcome, " + App.user().name(), "Your applications and documents, in one place."),
-                overview, Ui.columns(recent, actions), Ui.columns(nextSteps, portfolioHighlights));
+                overview, WorkspaceCards.shortcuts(), Ui.columns(recent, nextSteps), portfolioHighlights);
     }
 
     private VBox statistic(List<AppData.NocRequest> requests, AppData.Status status, String title, String style) {

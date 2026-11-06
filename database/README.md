@@ -1,6 +1,10 @@
 # Supabase setup
 
-Use a free Supabase PostgreSQL project. Apply the numbered migrations `001_initial.sql` through `008_admin_delegation.sql` in order, each once. For an existing project, apply only the migrations not already installed. Migrations run inside transactions and preserve existing accounts, requests, documents, and messages. They create no sample data.
+Use a free Supabase PostgreSQL project. Apply the numbered migrations `001_initial.sql` through `009_private_remarks.sql` in order, each once. For an existing project, apply only the migrations not already installed. Migrations run inside transactions and preserve existing accounts, requests, documents, and messages. They create no sample data.
+
+Migration 009 adds `private_remarks` for NOCs and portfolio entries. The `add_private_remark` RPC derives the recipient from the source and the sender from the verified current account. Only administrators or staff authorized to review that source can write. Row-level security permits reads by the verified student recipient, verified staff sender, and verified administrators; viewers, unrelated students, other teachers and anonymous visitors are excluded. Direct insert/update/delete privileges are not granted. Source deletion removes its associated remarks; remarks are separate from the NOC decision note. They are not selected into any publication payload.
+
+Run `verify_private_remarks.sql` after migration 009 as the database owner. It checks source authorization, sender identity, content validation, recipient-only visibility, staff and viewer boundaries, changed roles, unverified accounts, direct-write denial, and public/community payload isolation. Every fixture and publication is rolled back; it sends no emails or real remarks.
 
 ## First administrator
 

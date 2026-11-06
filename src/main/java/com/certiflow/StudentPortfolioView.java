@@ -194,7 +194,7 @@ public class StudentPortfolioView {
         Button add = Ui.secondary("Add files…", () -> addFiles(project)); add.setId("portfolio-add-files-" + project.id());
         Button remove = Ui.secondary("Delete entry", () -> removeProject(project)); remove.setId("portfolio-delete-" + project.id()); remove.getStyleClass().add("danger-button");
         card.getChildren().add(Ui.grid(3, 140, edit, add, remove));
-        card.getChildren().add(SharingControls.forProject(project));
+        card.getChildren().addAll(PrivateRemarks.forProject(project),SharingControls.forProject(project));
         UploadResult retry = retryUploads.get(project.id());
         if (retry != null) {
             Button retryButton = Ui.button("Retry failed files only", () -> uploadToProject(project, retry.failed()));

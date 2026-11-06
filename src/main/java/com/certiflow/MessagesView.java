@@ -38,6 +38,7 @@ public final class MessagesView {
     private final Button cancelEdit = Ui.secondary("Cancel edit", this::cancelEdit);
     private final Button backToInbox = Ui.secondary("‹ Conversations", this::showInbox);
     private final Button openSettings = Ui.secondary("Settings", () -> showSettings(true));
+    // Drafts belong to this open page only; private text is never persisted in preferences.
     private final Map<String, String> drafts = new HashMap<>();
     private final Map<String, EditDraft> editDrafts = new HashMap<>();
     private final List<AppData.Contact> contacts;
@@ -52,6 +53,7 @@ public final class MessagesView {
     private ChatSettings settings;
     private AppData.ChatMessage editing;
     private String selectedId, selectedName = "";
+    // Reject late responses after switching contacts or changing a message locally.
     private long selectionVersion, mutationVersion;
     private boolean loading, loadingOlder, sending, filtering, moreOlder, historyLoaded, narrow, showMobileInbox = true;
     private boolean selectedCanSend;
@@ -392,6 +394,7 @@ public final class MessagesView {
     private record EditDraft(AppData.ChatMessage original, String body) {}
     private record Anchor(double height, double offset) {}
 
+    // Poll only the newest page; a manual refresh also revisits already loaded history.
     private void load(boolean manual) {
         if (!active() || loading || loadingOlder || sending) return;
         String target = selectedId; long version = selectionVersion, mutation = mutationVersion;
@@ -420,6 +423,8 @@ public final class MessagesView {
                     subtitle.setText(c.canSend() ? "Private conversation · messages update automatically" : "Past conversation · new messages are unavailable for these account roles");
                 });
                 boolean first = !historyLoaded;
+                // A non-overlapping newest page means more than one page arrived between polls.
+                // Reset the window rather than presenting a transcript with an invisible gap.
                 boolean gap = !remotePageIds.isEmpty() && !result.rows().isEmpty()
                     && result.rows().stream().noneMatch(m -> remotePageIds.contains(m.id()));
                 List<AppData.ChatMessage> previous = displayed;

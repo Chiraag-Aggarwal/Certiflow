@@ -57,7 +57,8 @@ public class TeacherDashboardView {
                 Ui.muted(student != null && student.identityVerified() ? "Current identity checked by an administrator" : "Identity details are self-reported; check institutional records"),
                 Ui.muted(request.recipientId().isBlank() ? "Shared staff queue" : "Assigned to " + App.data().contactName(request.recipientId())),
                 Ui.muted(request.id() + " · Submitted " + Ui.date(request.submittedAt())),
-                Ui.text(request.reason()), Ui.messageContact("Message student", request.studentId()), note, actions);
+                Ui.text(request.reason()), Ui.messageContact("Message student", request.studentId()),
+                PrivateRemarks.forRequest(request), note, actions);
     }
 
     private void decide(AppData.NocRequest request, AppData.Status status, TextField note) {

@@ -40,6 +40,7 @@ public final class StaffPortfolioView {
             if (!project.description().isBlank()) card.getChildren().add(Ui.text(project.description()));
             if (!project.link().isBlank()) card.getChildren().add(Ui.secondary("Open project link", () -> App.openWebLink(project.link())));
             card.getChildren().add(Ui.messageContact("Message student", project.studentId()));
+            card.getChildren().add(PrivateRemarks.forProject(project));
             card.getChildren().add(Ui.muted(files.size() + " supporting file(s)"));
             for (AppData.PortfolioItem file : files) card.getChildren().add(Ui.card(Ui.text(file.title()), Ui.muted(file.fileName()),
                 Ui.secondary("Open document", () -> Background.run(view, () -> App.data().downloadPortfolio(file), App::openFile, error -> Ui.error(error.getMessage())))));

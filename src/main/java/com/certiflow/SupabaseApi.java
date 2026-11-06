@@ -10,7 +10,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
-/** Authenticated HTTPS access. Session credentials remain in memory only. */
+/**
+ * Supabase HTTP transport and in-memory session lifecycle. The publishable API key
+ * identifies the project; the signed-in user's token determines database access.
+ * Synchronized entry points prevent token refresh and logout from racing requests.
+ */
 final class SupabaseApi {
     private static final Gson JSON = new GsonBuilder().serializeNulls().create();
     private final URI base;
@@ -53,6 +57,7 @@ final class SupabaseApi {
     synchronized void resetPassword(String email, String code, String password) throws IOException {
         clearSession();
         try {
+            // Use the recovery session only for this password change, then discard it.
             acceptSession(json("POST", "/auth/v1/verify", Map.of("type","recovery","email",email,"token",code), false).getAsJsonObject());
             json("PUT", "/auth/v1/user", Map.of("password",password), true);
             signOut();
@@ -76,6 +81,7 @@ final class SupabaseApi {
         return send(method, path, body, mime, true, true);
     }
     private byte[] send(String method, String path, byte[] body, String mime, boolean authenticated, boolean retry) throws IOException {
+        // Only project-relative paths are accepted, so tokens cannot be sent to another host.
         if (!path.startsWith("/") || path.startsWith("//")) throw new IOException("Invalid API path.");
         if (authenticated) ensureSession();
         var builder = HttpRequest.newBuilder(base.resolve(path)).timeout(Duration.ofSeconds(45))
@@ -87,6 +93,7 @@ final class SupabaseApi {
         catch (InterruptedException ex) { Thread.currentThread().interrupt(); throw new IOException("The operation was interrupted.", ex); }
         catch (IOException ex) { throw new IOException("Could not reach Certiflow. Check your internet connection and try again.", ex); }
         if (response.statusCode() == 401 && authenticated && retry) {
+            // Refresh once for an expired token; never loop indefinitely on permission failures.
             expiresAt = Instant.EPOCH;
             return send(method,path,body,mime,true,false);
         }
@@ -96,6 +103,7 @@ final class SupabaseApi {
     private void ensureSession() throws IOException {
         if (accessToken == null || refreshToken == null) throw new IOException("Please sign in again.");
         if (Instant.now().plusSeconds(60).isBefore(expiresAt)) return;
+        // Renew slightly early, and reject a response that changes the authenticated identity.
         String expectedUser = userId;
         try {
             JsonObject refreshed = json("POST", "/auth/v1/token?grant_type=refresh_token", Map.of("refresh_token",refreshToken), false).getAsJsonObject();

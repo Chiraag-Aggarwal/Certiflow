@@ -6,8 +6,14 @@ import java.nio.file.*;
 import java.time.*;
 import java.util.*;
 
-/** Server-backed account data. No sample accounts, records, or offline authentication. */
+/**
+ * Data operations used by the JavaFX views: validate input, call Supabase, and keep
+ * immutable snapshots for rendering. Call network methods through {@link Background}.
+ * Client checks give useful errors; database row policies and RPCs enforce access.
+ * No sample accounts, records, or offline authentication are supplied here.
+ */
 public final class AppData {
+    // Immutable records mirror the server's account, application and collaboration data.
     public enum Role {
         STUDENT, VIEWER, TEACHER, ADMIN;
         public boolean isStaff() { return this == TEACHER || this == ADMIN; }
@@ -38,8 +44,34 @@ public final class AppData {
         public ChatMessage(String id,String senderId,String recipientId,String body,LocalDateTime sentAt,LocalDateTime readAt) { this(id,senderId,recipientId,body,sentAt,readAt,null); }
     }
     public record Conversation(String contactId,String name,Role role,String department,String lastMessage,LocalDateTime lastSentAt,int unreadCount,boolean canSend) {}
+    public enum RemarkSource { NOC, PROJECT }
+    public record PrivateRemark(String id,String studentId,String authorId,String authorName,String body,LocalDateTime createdAt) {}
+
+    public List<PrivateRemark> privateRemarks(RemarkSource source,String sourceId,int offset) throws IOException {
+        // Load remarks separately from the main snapshots; they never feed public sharing.
+        User actor=requireCurrent();
+        if(actor.role()==Role.VIEWER) throw new IllegalArgumentException("Private remarks are not available to viewers.");
+        Objects.requireNonNull(source,"Choose an item type.");
+        if(offset<0) throw new IllegalArgumentException("Invalid remark page.");
+        String field=source==RemarkSource.NOC?"request_id":"project_id";
+        JsonArray rows=service().json("GET","/rest/v1/private_remarks?select=*&"+field+"=eq."+UUID.fromString(sourceId)
+            +"&order=created_at.desc,id.desc&limit=50&offset="+offset,null,true).getAsJsonArray();
+        List<PrivateRemark> result=new ArrayList<>();
+        for(JsonElement row:rows) result.add(remark(row.getAsJsonObject()));
+        return List.copyOf(result);
+    }
+    public PrivateRemark addPrivateRemark(RemarkSource source,String sourceId,String body) throws IOException {
+        if(!requireCurrent().role().isStaff()) throw new IllegalArgumentException("Only teachers and administrators can send private remarks.");
+        Objects.requireNonNull(source,"Choose an item type.");
+        // The RPC derives the sender and student from the session and source, not client IDs.
+        return remark(one(service().json("POST","/rest/v1/rpc/add_private_remark",Map.of("source_kind",source.name(),
+            "source_id",UUID.fromString(sourceId).toString(),"remark_text",required(body,"Remark",2000)),true)));
+    }
+    private static PrivateRemark remark(JsonObject row) { return new PrivateRemark(text(row,"id"),text(row,"student_id"),
+        text(row,"author_id"),text(row,"author_name"),text(row,"body"),date(row,"created_at")); }
     private final Path directory;
     private final SupabaseApi api;
+    // Replace lists instead of mutating them while JavaFX renders the previous snapshot.
     private volatile User current;
     private volatile List<User> users = List.of();
     private volatile List<NocRequest> requests = List.of();
@@ -59,6 +91,7 @@ public final class AppData {
     public boolean configured() { return api != null; }
     private SupabaseApi service() { if (api == null) throw new IllegalStateException("Certiflow is not connected yet. Ask your administrator to finish database setup."); return api; }
     SupabaseApi cloudApi() { requireCurrent(); return service(); }
+    /** Compatibility entry point: a caller-supplied role never selects or grants access. */
     public Optional<User> authenticate(Role role, String email, String password) throws IOException {
         return authenticate(email, password);
     }
@@ -68,6 +101,7 @@ public final class AppData {
         if (password == null || password.isBlank()) throw new IllegalArgumentException("Enter your email and password.");
         service().signIn(email,password);
         try {
+            // The verified server profile, not the login form, decides the workspace and role.
             List<User> accounts = readUsers("&id=eq." + UUID.fromString(api.userId()));
             if (accounts.size() != 1) throw new IOException("Your account profile is missing. Contact your administrator.");
             User user = accounts.get(0);
@@ -91,6 +125,7 @@ public final class AppData {
     public User currentUser() { return current; }
     public boolean canManageAdmins() { return current != null && current.role() == Role.ADMIN && canManageAdmins; }
     public boolean adminCapabilitiesAvailable() { return adminCapabilitiesAvailable; }
+    /** Fetch only rows visible under the current session's server policies. */
     public void refresh() throws IOException {
         User account = requireCurrent();
         List<User> nextUsers = readUsers("");
@@ -109,6 +144,7 @@ public final class AppData {
                 }
             } catch (IOException | RuntimeException ignored) { /* Privileged controls stay unavailable until a successful refresh. */ }
         }
+        // Discard a response if logout or another sign-in replaced the account during the fetch.
         if (current != account) return;
         users = nextUsers; requests = nextRequests; portfolios = nextPortfolios; projects = nextProjects; contacts = nextContacts;
         current = nextCurrent; canManageAdmins = nextCanManageAdmins; adminCapabilitiesAvailable = nextCapabilitiesAvailable;
@@ -140,6 +176,7 @@ public final class AppData {
         if (!user.role().isStaff()) throw new IllegalArgumentException("Only staff can review applications.");
         if (decision != Status.APPROVED && decision != Status.REJECTED) throw new IllegalArgumentException("Choose Approve or Reject.");
         String cleanNote = decision == Status.REJECTED ? required(note,"Rejection reason",2000) : optional(note,2000);
+        // The RPC checks the assigned reviewer and performs the status transition atomically.
         NocRequest result = request(one(service().json("POST","/rest/v1/rpc/decide_request",Map.of("request_id",UUID.fromString(id).toString(),"decision",decision.name(),"note",cleanNote),true)));
         requests = requests.stream().map(r -> r.id().equals(result.id()) ? result : r).toList();
     }
@@ -162,6 +199,7 @@ public final class AppData {
         if (account.id().equals(target) || role == null) throw new IllegalArgumentException("Choose access for another account. You cannot change your own access.");
         boolean targetAdmin = users.stream().anyMatch(user -> user.id().equals(target) && user.role() == Role.ADMIN);
         if ((role == Role.ADMIN || targetAdmin) && !canManageAdmins()) throw new IllegalArgumentException("Only the original administrator can grant or remove administrator access.");
+        // Privilege changes go through the audited server function, never a profile PATCH.
         User result = user(one(service().json("POST","/rest/v1/rpc/set_account_role",Map.of("target_id",target,"new_role",role.name()),true)));
         replaceUser(result); refresh(); return result;
     }
@@ -195,6 +233,7 @@ public final class AppData {
     public void deleteProject(Project project) throws IOException {
         ownProject(project);
         List<PortfolioItem> attachments=portfolios.stream().filter(p->p.projectId().equals(project.id())).toList();
+        // Remove database access first. Storage cleanup is a separate operation and may fail.
         one(service().json("DELETE","/rest/v1/portfolio_projects?id=eq."+UUID.fromString(project.id()),null,true));
         projects=projects.stream().filter(p->!p.id().equals(project.id())).toList();
         portfolios=portfolios.stream().filter(p->!p.projectId().equals(project.id())).toList();
@@ -225,6 +264,7 @@ public final class AppData {
             PortfolioItem result = portfolio(response.get(0).getAsJsonObject());
             List<PortfolioItem> next = new ArrayList<>(portfolios); next.add(0,result); portfolios = List.copyOf(next); return result;
         } catch (IOException | RuntimeException ex) {
+            // Storage and Postgres cannot share a transaction; undo an unregistered upload.
             try { service().json("DELETE","/storage/v1/object/portfolios",Map.of("prefixes",List.of(stored)),true); }
             catch (Exception cleanup) { ex.addSuppressed(cleanup); }
             throw ex;
@@ -238,6 +278,7 @@ public final class AppData {
         Files.createDirectories(path.getParent()); Files.write(path,bytes); return path;
     }
     public Path portfolioPath(PortfolioItem item) {
+        // Server storage names are UUID paths, never arbitrary local filenames or traversal.
         if (!item.storedName().matches("[0-9a-f-]{36}/[0-9a-f-]{36}\\.(pdf|png|jpg|jpeg|gif|webp|txt)")) throw new IllegalArgumentException("Invalid document path.");
         return directory.resolve("downloads").resolve(item.storedName());
     }
@@ -275,11 +316,13 @@ public final class AppData {
         if(pageSize<1 || pageSize>100) throw new IllegalArgumentException("Load between 1 and 100 messages at a time.");
         Map<String,Object> body=new LinkedHashMap<>();body.put("other_id",other);body.put("before_id",beforeId==null||beforeId.isBlank()?null:UUID.fromString(beforeId).toString());body.put("page_size",pageSize);
         JsonArray result=service().json("POST","/rest/v1/rpc/chat_history",body,true).getAsJsonArray();
+        // The server pages newest first; the conversation renders oldest first within a page.
         List<ChatMessage> rows=new ArrayList<>();for(JsonElement row:result)rows.add(message(row.getAsJsonObject()));Collections.reverse(rows);return List.copyOf(rows);
     }
     public ChatMessage editMessage(ChatMessage original,String body) throws IOException {
         User account=requireCurrent();
         if(original==null || !account.id().equals(original.senderId()))throw new IllegalArgumentException("You can edit only your own messages.");
+        // original_body lets the server detect a concurrent edit instead of overwriting it.
         return message(one(service().json("POST","/rest/v1/rpc/edit_message",Map.of("message_id",UUID.fromString(original.id()).toString(),
             "new_body",required(body,"Message",4000),"original_body",original.body()),true)));
     }
@@ -290,6 +333,7 @@ public final class AppData {
         while(true){JsonArray page=service().json("GET","/rest/v1/messages?select=id&recipient_id=eq."+account.id()+"&read_at=is.null&order=id.asc&limit=500&offset="+total,null,true).getAsJsonArray();total+=page.size();if(page.size()<500)return total;}
     }
     private String chatContact(String id) {
+        // Sending requires a current eligible contact; old history remains separately readable.
         User account=requireCurrent();String clean=UUID.fromString(id).toString();
         Contact target=contacts.stream().filter(c->c.id().equals(clean)).findFirst().orElseThrow(()->new IllegalArgumentException("Choose a registered contact."));
         if(clean.equals(account.id()) || (!account.role().isStaff() && !target.role().isStaff()))throw new IllegalArgumentException("Students and viewers can message teachers and administrators.");return clean;
@@ -311,6 +355,7 @@ public final class AppData {
         return all("profiles","id.asc").stream().map(AppData::user).toList();
     }
     private List<JsonObject> all(String table,String order) throws IOException {
+        // Stable ordering and pagination avoid silently truncating lists at the API row limit.
         List<JsonObject> result = new ArrayList<>(); int offset = 0;
         while (true) {
             JsonArray page = service().json("GET","/rest/v1/"+table+"?select=*&order="+order+"&limit=500&offset="+offset,null,true).getAsJsonArray();

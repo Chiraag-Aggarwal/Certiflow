@@ -17,6 +17,8 @@ final class TestBackend implements AutoCloseable {
     final List<JsonObject> requests=new CopyOnWriteArrayList<>(), portfolios=new CopyOnWriteArrayList<>();
     final List<JsonObject> projects=new CopyOnWriteArrayList<>(), messages=new CopyOnWriteArrayList<>();
     final List<JsonObject> chatContacts=new CopyOnWriteArrayList<>();
+    final List<JsonObject> remarks=new CopyOnWriteArrayList<>();
+    volatile boolean remarksUnavailable=false;
     final Map<String,JsonObject> shares=new java.util.concurrent.ConcurrentHashMap<>();
     final Map<String,AppData.Role> profileRoles=new java.util.concurrent.ConcurrentHashMap<>();
     final List<String> calls=new CopyOnWriteArrayList<>();
@@ -69,6 +71,23 @@ final class TestBackend implements AutoCloseable {
                 if(capabilitiesUnavailable){reply(ex,503,"{\"message\":\"Capabilities unavailable\"}");return;}
                 if(capabilitiesResponse!=null){reply(ex,200,capabilitiesResponse);return;}
                 reply(ex,200,"{\"can_manage_admins\":"+(role==AppData.Role.ADMIN&&canManageAdmins)+"}");return;
+            }
+            if(path.equals("/rest/v1/private_remarks")) {
+                if(remarksUnavailable){reply(ex,503,"{\"message\":\"Remarks temporarily unavailable\"}");return;}
+                List<JsonObject> found=remarks.stream().filter(r->role!=AppData.Role.VIEWER&&(role==AppData.Role.ADMIN
+                    ||role==AppData.Role.STUDENT&&ID.equals(r.get("student_id").getAsString())
+                    ||role==AppData.Role.TEACHER&&ID.equals(r.get("author_id").getAsString())))
+                    .filter(r->query.contains("request_id=eq."+r.get("source_id").getAsString())&&r.get("source_kind").getAsString().equals("NOC")
+                        ||query.contains("project_id=eq."+r.get("source_id").getAsString())&&r.get("source_kind").getAsString().equals("PROJECT")).toList();
+                reply(ex,200,new Gson().toJson(page(found,query)));return;
+            }
+            if(path.equals("/rest/v1/rpc/add_private_remark")) {
+                if(!role.isStaff()){reply(ex,403,"{}");return;}
+                if(remarksUnavailable){reply(ex,503,"{\"message\":\"Remarks temporarily unavailable\"}");return;}
+                JsonObject remark=new JsonObject();remark.addProperty("id",UUID.randomUUID().toString());remark.addProperty("student_id",ID);
+                remark.addProperty("author_id",ID);remark.addProperty("author_name","Registered staff member");
+                remark.add("body",lastBody.get("remark_text"));remark.add("source_id",lastBody.get("source_id"));remark.add("source_kind",lastBody.get("source_kind"));
+                remark.addProperty("created_at","2026-11-06T08:00:00Z");remarks.add(0,remark);reply(ex,200,remark.toString());return;
             }
             if(path.equals("/rest/v1/rpc/get_own_share")||path.equals("/rest/v1/rpc/publish_share")||path.equals("/rest/v1/rpc/unpublish_share")) {
                 if(sharingUnavailable){reply(ex,503,"{\"message\":\"Sharing service unavailable.\"}");return;}

@@ -56,6 +56,7 @@ public class TeacherHistoryView {
                     Ui.muted("Decided " + Ui.date(request.decidedAt())),
                     Ui.text("Application: " + request.reason()));
             if (!request.decisionNote().isBlank()) card.getChildren().add(Ui.text("Decision note: " + request.decisionNote()));
+            card.getChildren().add(PrivateRemarks.forRequest(request));
             decisions.getChildren().add(card);
         }
         if (visible.isEmpty()) decisions.getChildren().add(Ui.card(Ui.muted(history.isEmpty()

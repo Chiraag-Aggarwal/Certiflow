@@ -200,9 +200,40 @@
 .app-page:compact .app-brand-name { -fx-font-size: 19px; }
 
 
-.welcome-banner { -fx-background-color: -cf-tint; -fx-background-radius: 16px; -fx-border-color: -cf-border; -fx-border-radius: 16px; -fx-padding: 12px 24px; }
-.welcome-banner .app-heading { -fx-text-fill: -cf-text; }
-.welcome-banner .app-muted { -fx-text-fill: -cf-muted; }
+.welcome-banner { -fx-background-color: linear-gradient(to bottom right, #315c49, #183e34); -fx-background-radius: 24px; -fx-border-color: transparent; -fx-border-radius: 24px; -fx-padding: 26px 32px; -fx-effect: dropshadow(gaussian, rgba(20,45,35,0.16), 22, 0, 0, 7); }
+.app-page:plum .welcome-banner { -fx-background-color: linear-gradient(to bottom right, #725575, #45334f); }
+.app-page:terracotta .welcome-banner { -fx-background-color: linear-gradient(to bottom right, #a15b3b, #633927); }
+.app-page:teal .welcome-banner { -fx-background-color: linear-gradient(to bottom right, #286c70, #174548); }
+.welcome-banner .app-heading { -fx-text-fill: #fffdf6; }
+.welcome-banner .app-muted { -fx-text-fill: #e4ece2; }
+.welcome-banner .hero-eyebrow { -fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: #f1d9a2; }
+.welcome-banner .hero-title { -fx-font-size: 30px; }
+.welcome-banner .app-secondary { -fx-background-color: #fffdf6; -fx-text-fill: #263d34; }
+.workspace-tile { -fx-border-color: transparent; -fx-background-radius: 20px; -fx-padding: 22px; }
+.workspace-tile .app-heading { -fx-font-size: 20px; }
+.tile-lilac { -fx-background-color: #f0ebf8; }
+.tile-peach { -fx-background-color: #fbefdf; }
+.tile-mint { -fx-background-color: #e7f2e8; }
+.app-page:dark .tile-lilac { -fx-background-color: #34303f; }
+.app-page:dark .tile-peach { -fx-background-color: #3d3429; }
+.app-page:dark .tile-mint { -fx-background-color: #293d35; }
+.workspace-icon, .empty-state-icon { -fx-background-color: -cf-surface; -fx-background-radius: 14px; }
+.workspace-icon .line-icon, .empty-state-icon .line-icon { -fx-stroke: -cf-accent; }
+.workspace-empty { -fx-border-style: dashed; -fx-background-color: -cf-soft; -fx-padding: 28px; }
+.app-statistic { -fx-border-width: 0 0 3px 0; }
+.app-statistic.stat-gold { -fx-border-color: -cf-warn; }
+.app-statistic.stat-green { -fx-border-color: -cf-good; }
+.app-statistic.stat-red { -fx-border-color: -cf-bad; }
+.app-statistic.stat-neutral { -fx-border-color: -cf-accent; }
+.publication-card { -fx-border-width: 4px 1px 1px 1px; }
+.publication-project { -fx-border-color: -cf-accent -cf-border -cf-border -cf-border; }
+.publication-noc { -fx-border-color: -cf-warn -cf-border -cf-border -cf-border; }
+.private-remarks > .title { -fx-background-color: -cf-tint; -fx-background-radius: 10px; -fx-padding: 12px; }
+.private-remarks > .title > .text { -fx-fill: -cf-text; }
+.private-remarks > .content { -fx-background-color: -cf-soft; -fx-border-color: -cf-border; -fx-border-radius: 0 0 10px 10px; }
+.private-remarks-content { -fx-padding: 14px; }
+.remark-note { -fx-padding: 12px; -fx-background-color: -cf-surface; -fx-background-radius: 10px; -fx-border-color: -cf-accent; -fx-border-width: 0 0 0 3px; }
+.app-page:compact .welcome-banner .hero-title { -fx-font-size: 23px; }
 .app-sidebar .icon-button { -fx-background-color: transparent; -fx-border-color: -cf-border; }
 .app-sidebar .icon-button:hover { -fx-background-color: -cf-tint; }
 .app-sidebar .icon-button .line-icon { -fx-stroke: -cf-text; }

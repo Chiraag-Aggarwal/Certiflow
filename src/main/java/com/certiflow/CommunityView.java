@@ -7,7 +7,7 @@ import javafx.scene.layout.VBox;
 /** Read-only publications deliberately shared with signed-in Certiflow users. */
 final class CommunityView {
     private final VBox view;
-    private final VBox items=new VBox(16);
+    private final javafx.scene.layout.GridPane items=Ui.grid(2,320);
     private final TextField search=new TextField();
     private final ComboBox<String> filter=new ComboBox<>();
     private final Label feedback=AccountView.feedback("community-feedback");
@@ -36,13 +36,14 @@ final class CommunityView {
         publications.stream().filter(p->category==null||category.equals("All publications")||(category.equals("NOC applications")==p.sourceKind().equals("NOC")))
             .filter(p->(p.title()+" "+p.summary()+" "+p.displayName()+" "+p.category()).toLowerCase(Locale.ROOT).contains(query)).forEach(p->{
                 VBox card=Ui.card(Ui.title(p.title()),Ui.muted("By "+p.displayName()+" · "+Ui.date(p.publishedAt())),Ui.muted(p.category()+(p.sourceKind().equals("NOC")?" · Status: "+p.status():" · Student-provided work")));
+                card.getStyleClass().addAll("publication-card",p.sourceKind().equals("NOC")?"publication-noc":"publication-project");
                 if(!p.summary().isBlank())card.getChildren().add(Ui.text(p.summary()));
                 if(!p.link().isBlank())card.getChildren().add(Ui.secondary("Open published link",()->App.openWebLink(p.link())));
                 for(PublicSharing.FileItem file:p.files())card.getChildren().add(Ui.secondary("Open "+file.fileName(),()->Background.run(view,()->PublicSharing.download(file),App::openFile,error->Ui.error(error.getMessage()))));
                 if(List.of("LINK","BOTH").contains(p.audience()))card.getChildren().add(Ui.secondary("Open public web page",()->App.openWebLink(PublicSharing.publicUrl(p))));
                 items.getChildren().add(card);
             });
-        if(items.getChildren().isEmpty())items.getChildren().add(Ui.card(Ui.title("No publications to show"),Ui.muted(publications.isEmpty()?"Student work will appear here when its owner shares it with the Certiflow community. Check back as the community grows.":"Try another search or publication type.")));
+        if(items.getChildren().isEmpty())items.getChildren().add(WorkspaceCards.empty("Discoveries start with shared work",publications.isEmpty()?"This space is ready for student projects, achievements and NOC updates. Only work deliberately shared by its owner appears here.":"No publications match yet. Try another search or publication type.","discover"));
     }
     VBox getView(){return view;}
 }
