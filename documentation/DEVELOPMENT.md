@@ -37,7 +37,7 @@ Local folders excluded from Git have different purposes. `.tools/` and `lib/` co
 | Account administration | `AccountManagementView`: server-authorized role and identity controls. |
 | Messages and remarks | `MessagesView`, `ChatSettings`: participant-only chat and local preferences. `PrivateRemarks`: private feedback on a single NOC or portfolio entry. |
 | Sharing and discovery | `SharingControls`: owner-reviewed publication editor. `PublicSharing`: publication RPCs and selected-file downloads. `CommunityView`: shared item feed and the viewer home. |
-| Shared interface | `Ui`: page shell, controls and responsive layouts. `HoverDrawer`: navigation drawer. `UiSettings`: palettes/preferences. `WorkspaceCards`, `Icons`, `AcademicArt`, `AcademicBackdrop`, `ToastNotice`: reusable presentation. |
+| Shared interface | `Ui`: page shell, controls and responsive layouts. `PageComponents`: interior-page introductions, section headings and tags. `HoverDrawer`: navigation drawer. `UiSettings`: palettes/preferences. `WorkspaceCards`, `Icons`, `AcademicArt`, `AcademicBackdrop`, `ToastNotice`: reusable presentation. |
 | Other helpers | `RecipientPicker`: selects a real staff UUID, not a typed name. `ReportExporter`: CSV output from available records. |
 
 ## How an action reaches the database
@@ -96,7 +96,21 @@ Write a corresponding `verify_*.sql` script with isolated fixtures and a final r
 
 ### Change styling or artwork
 
-Use `style.css` for shared pages, `auth.css` for account screens and `chat.css` for messages. Reuse palette variables and `Ui` layout helpers; test both light/dark appearance and narrow/wide layouts. Keep the original `logo.png` proportional. App/window and Windows shortcut icons are separate assets. Run the shortcut installer only when the Windows icon or shortcut needs refreshing.
+Use `style.css` for base palettes and shared controls, `auth.css` for account screens and `chat.css` for messages. `style.css` imports `workspace.css`, `profile.css`, `student-work.css` and `review-work.css` for the interior-page components. `PageComponents` provides shared section headings and tags. Imported component styles use `.app-page` specificity so later generic card rules do not override them. Reuse palette variables and `Ui` layout helpers; test both light/dark appearance and narrow/wide layouts. Keep the original `logo.png` proportional. App/window and Windows shortcut icons are separate assets. Run the shortcut installer only when the Windows icon or shortcut needs refreshing.
+
+The main `Stage` keeps its native decorations and resizable borders, and starts maximised. Do not force full screen during startup: it is an explicit F11/top-bar action so native minimise, restore and Windows snap remain available by default.
+
+| Stylesheet in `src/main/resources/` | Owns |
+| --- | --- |
+| `style.css` | Palette variables, shared controls, navigation, base cards and home-page styles; imports the interior-page styles below. |
+| `workspace.css` | Shared page introductions, section headings, tags and community publications. |
+| `profile.css` | Identity card, completion meter/checklist and profile form sections. |
+| `student-work.css` | Student NOC and portfolio editors, status summaries, attachments and shared portfolio cards. |
+| `review-work.css` | Staff request/history cards, roster, report previews and account access. |
+| `auth.css` | Sign-in, registration, verification and recovery screens. |
+| `chat.css` | Conversation list, transcript, composer and chat settings. |
+
+Keep feature-specific CSS in its owning file and shared visual building blocks in `PageComponents` or `Ui`. View classes arrange controls and handle events; data/network operations belong in `AppData` or `PublicSharing`. This keeps changes to a page easy to locate without duplicating permissions or transport code.
 
 ## Build and test
 

@@ -1,0 +1,30 @@
+/* Shared interior-page details use the active palette in both light and dark modes. */
+.app-page .page-introduction {
+    -fx-background-color: linear-gradient(to right, -cf-tint, -cf-surface);
+    -fx-background-radius: 22px;
+    -fx-border-color: -cf-border;
+    -fx-border-radius: 22px;
+    -fx-padding: 24px 28px;
+}
+.app-page .page-introduction .page-title { -fx-font-size: 29px; }
+.app-page .page-introduction .page-kicker { -fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: -cf-accent; }
+.app-page .page-heading-symbol { -fx-background-color: -cf-surface; -fx-background-radius: 18px; -fx-rotate: -6; }
+.app-page .page-heading-symbol .line-icon { -fx-stroke: -cf-accent; -fx-stroke-width: 1.8; }
+.app-page:compact .page-introduction { -fx-padding: 19px; }
+.app-page:compact .page-introduction .page-title { -fx-font-size: 24px; }
+.app-page .section-symbol { -fx-background-color: -cf-tint; -fx-background-radius: 13px; }
+.app-page .section-symbol .line-icon { -fx-stroke: -cf-accent; }
+.app-page .section-heading .app-heading { -fx-font-size: 18px; }
+.app-page .section-heading .app-muted { -fx-font-size: 12px; }
+.app-page .detail-tag { -fx-background-color: -cf-tint; -fx-text-fill: -cf-accent; -fx-background-radius: 20px; -fx-padding: 5px 10px; -fx-font-size: 11px; -fx-font-weight: bold; }
+.app-page .detail-tag.tag-muted { -fx-background-color: -cf-soft; -fx-text-fill: -cf-muted; }
+.app-page .detail-tag.tag-good { -fx-background-color: -cf-good-bg; -fx-text-fill: -cf-good; }
+.app-page .detail-tag.tag-warm { -fx-background-color: -cf-warn-bg; -fx-text-fill: -cf-warn; }
+.app-page .section-note { -fx-background-color: -cf-tint; -fx-padding: 12px 16px; -fx-background-radius: 12px; }
+.app-page .collection-tools { -fx-background-color: -cf-surface; -fx-background-radius: 18px; -fx-padding: 20px; -fx-border-color: -cf-border; -fx-border-radius: 18px; }
+.app-page .collection-summary { -fx-font-weight: bold; -fx-text-fill: -cf-accent; }
+.app-page .publication-card { -fx-background-radius: 20px; -fx-border-radius: 20px; -fx-padding: 24px; }
+.app-page .publication-card .publication-title { -fx-font-size: 22px; }
+.app-page .publication-byline { -fx-padding: 12px 0 0 0; -fx-border-color: -cf-border; -fx-border-width: 1px 0 0 0; }
+.app-page .publication-files { -fx-background-color: -cf-soft; -fx-background-radius: 12px; -fx-padding: 12px; }
+.app-page:compact .collection-tools, .app-page:compact .publication-card { -fx-padding: 18px; }

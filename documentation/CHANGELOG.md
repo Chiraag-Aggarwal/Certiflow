@@ -1,3 +1,12 @@
+# Menu pages, profile progress and normal window controls — 6 November 2026
+
+- Restored standard desktop window behaviour. Startup is maximised with the native title bar, minimise/restore/maximise buttons and resizable borders. F11 or the top-bar button enters optional full screen; Esc leaves it. Full screen is no longer forced on launch.
+- Refreshed the content of every menu area: NOC forms and status summaries, portfolio editors and file cards, staff reviews and decision timelines, student roster, report previews, account access, community filters/publications and chat. Shared page introductions and section icons keep these screens consistent with the home pages. All summaries come from the current account's available records.
+- Rebuilt the profile identity card with initials, grouped account details and a palette-aware progress meter. Its percentage and five-field checklist use saved profile details only; identity verification remains separate. Improved the profile editing sections for every role.
+- Added scoped stylesheets for workspace, profile, student-work and staff-review components, with light/dark palette support. Preserved existing form IDs, actions, access rules, sharing and private remarks.
+- Organized shared visual components in `PageComponents`, documented stylesheet ownership and the new class in the developer guide, removed obsolete profile-bar selectors, and separated the community feed's filtering/loading from publication-card rendering for readability.
+- Validation: the complete 87-test suite passed after the final code organization, including all 23 interface tests. Checks cover populated records/report filters, saved profile completion, chat composer visibility, every menu page at 320/390/768/960/1366 pixels, and dark layouts. Documentation links and stylesheet imports resolve. Current previews are local and ignored in `previews/menu-refresh`.
+
 # Repository cleanup and developer documentation — 6 November 2026
 
 - Removed 366 old generated screenshots, logs and test outputs (about 14.9 MB), the unused `OptionView` wrapper and three unreferenced legacy icons. Kept one current sign-in screenshot in `documentation/images` for the README. Future previews remain ignored by Git.

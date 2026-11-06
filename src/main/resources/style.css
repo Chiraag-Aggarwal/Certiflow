@@ -1,8 +1,11 @@
+@import "workspace.css";
+@import "profile.css";
+@import "student-work.css";
+@import "review-work.css";
+
 /* Warm, selectable palettes on a custom academic-paper background. */
 .message-bubble { -fx-background-color: -cf-soft; -fx-background-radius: 16px; -fx-padding: 14px 18px; -fx-border-color: -cf-border; -fx-border-radius: 16px; }
 .message-outgoing { -fx-background-color: -cf-tint; -fx-border-color: transparent; }
-.profile-progress .bar { -fx-background-color: -cf-accent; -fx-background-radius: 6px; }
-.profile-progress .track { -fx-background-color: -cf-soft; -fx-background-radius: 6px; }
 .root, .dialog-pane {
     -fx-font-family: "Segoe UI"; -fx-font-size: 14px;
     -cf-bg: #f6f5ef; -cf-surface: #fffef9; -cf-soft: #f1f3eb;

@@ -35,6 +35,9 @@ public class App extends Application {
         instance = this;
         primaryStage = stage;
         stage.setTitle("Certiflow");
+        // Keep the native Windows title bar, resize borders and snap/minimize controls.
+        // Full screen is an optional F11 action, never forced during startup.
+        stage.setResizable(true);
         stage.setMinWidth(360);
         stage.setMinHeight(420);
         try {
@@ -54,7 +57,6 @@ public class App extends Application {
             stage.setMaximized(true);
             stage.show();
             stage.setFullScreenExitHint("Press Esc to leave full screen. Press F11 to switch back.");
-            stage.setFullScreen(true);
         } catch (Exception ex) {
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle("Certiflow could not start");

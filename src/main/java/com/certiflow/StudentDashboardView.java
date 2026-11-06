@@ -52,6 +52,8 @@ public class StudentDashboardView {
 
         int completion = TeacherProfileView.completion(App.user());
         ProgressBar progress = new ProgressBar(completion / 100.0);
+        progress.getStyleClass().add("profile-completion-meter");
+        progress.setMinHeight(10); progress.setPrefHeight(10); progress.setMaxHeight(10);
         progress.setMaxWidth(Double.MAX_VALUE); progress.setMinWidth(0); progress.setId("student-profile-progress");
         VBox nextSteps = Ui.card(Ui.section("Your next steps", "Small updates help teachers understand your work."),
                 Ui.text("Profile details · " + completion + "% complete"), progress,

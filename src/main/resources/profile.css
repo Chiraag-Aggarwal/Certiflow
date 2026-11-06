@@ -1,0 +1,31 @@
+/* Profile identity, saved-detail progress and grouped editing fields. */
+.app-page .app-card.profile-identity-card { -fx-padding: 0; -fx-spacing: 0; -fx-background-radius: 22px; -fx-border-radius: 22px; }
+.app-page .profile-introduction { -fx-padding: 26px; -fx-background-color: -cf-tint; -fx-background-radius: 22px 22px 0 0; }
+.app-page .profile-avatar { -fx-background-color: -cf-accent; -fx-background-radius: 23px; -fx-text-fill: -cf-primary-text; -fx-font-size: 24px; -fx-font-weight: bold; }
+.app-page .profile-introduction .profile-display-name { -fx-font-size: 23px; -fx-font-weight: bold; }
+.app-page .profile-role-pill { -fx-background-color: -cf-surface; -fx-text-fill: -cf-accent; -fx-background-radius: 20px; -fx-padding: 5px 10px; -fx-font-size: 11px; -fx-font-weight: bold; }
+.app-page .profile-account-details { -fx-padding: 24px 26px; }
+.app-page .profile-account-details .separator { -fx-padding: 8px 0; }
+.app-page .profile-account-details .separator .line { -fx-border-color: -cf-border; -fx-border-width: 1px 0 0 0; }
+.app-page .profile-account-details .status-pill { -fx-padding: 7px 10px; -fx-background-radius: 8px; }
+.app-page .profile-eyebrow { -fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: -cf-accent; }
+.app-page .profile-completion-card { -fx-padding: 22px 26px; -fx-background-color: -cf-soft; -fx-border-color: -cf-border; -fx-border-width: 1px 0; }
+.app-page .app-card .profile-completion-value { -fx-font-size: 38px; -fx-text-fill: -cf-accent; }
+.app-page .profile-completion-meter { -fx-background-color: transparent; -fx-background-insets: 0; -fx-padding: 0; -fx-indeterminate-bar-length: 0; }
+.app-page .profile-completion-meter > .track { -fx-background-color: -cf-border; -fx-background-insets: 0; -fx-background-radius: 10px; -fx-border-width: 0; -fx-padding: 0; }
+.app-page .profile-completion-meter > .bar { -fx-background-color: -cf-accent; -fx-background-insets: 0; -fx-background-radius: 10px; -fx-border-width: 0; -fx-padding: 0; }
+.app-page .profile-step { -fx-padding: 4px 0; }
+.app-page .profile-step-label { -fx-font-size: 12px; }
+.app-page .profile-step-mark { -fx-background-radius: 7px; -fx-font-size: 13px; -fx-font-weight: bold; }
+.app-page .profile-step-complete .profile-step-mark { -fx-background-color: -cf-good-bg; -fx-text-fill: -cf-good; }
+.app-page .profile-step-open .profile-step-mark { -fx-background-color: -cf-surface; -fx-text-fill: -cf-muted; -fx-border-color: -cf-border; -fx-border-radius: 7px; }
+.app-page .profile-step-open .profile-step-label { -fx-text-fill: -cf-muted; }
+.app-page .profile-protection { -fx-padding: 22px 26px 26px; }
+.app-page .app-card.profile-editor-card { -fx-spacing: 22px; -fx-background-radius: 22px; -fx-border-radius: 22px; }
+.app-page .profile-form-section { -fx-border-color: -cf-border; -fx-border-width: 1px 0 0 0; -fx-padding: 22px 0 0; }
+.app-page .profile-form-notice { -fx-background-color: -cf-soft; -fx-background-radius: 12px; -fx-padding: 14px; }
+.app-page:compact .profile-introduction { -fx-padding: 20px; }
+.app-page:compact .profile-account-details, .app-page:compact .profile-protection { -fx-padding: 20px; }
+.app-page:compact .profile-completion-card { -fx-padding: 20px; }
+.app-page:compact .profile-introduction .profile-display-name { -fx-font-size: 20px; }
+.app-page:compact .profile-identity-card .profile-completion-card .profile-completion-value { -fx-font-size: 32px; }

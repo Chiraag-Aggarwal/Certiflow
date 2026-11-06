@@ -27,6 +27,7 @@ public final class MessagesView {
     private final TextArea composer = new TextArea();
     private final Label feedback = AccountView.feedback("messages-feedback");
     private final Label heading = Ui.title("Choose a conversation");
+    private final Label conversationAvatar = Ui.text("…");
     private final Label subtitle = Ui.muted("Your private conversations stay here.");
     private final Label unread = Ui.muted("Loading conversations…");
     private final Label count = Ui.muted("0 / 4,000 characters");
@@ -87,7 +88,7 @@ public final class MessagesView {
         VBox.setVgrow(inboxScroll, Priority.ALWAYS);
         inboxScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         inboxScroll.getStyleClass().add("dashboard-scroll-pane");
-        people = Ui.card(Ui.section("Conversations", "Pick up where you left off."), search, unread,
+        people = Ui.card(PageComponents.section("messages", "Conversations", "Pick up where you left off."), search, unread,
             inboxScroll, Ui.text("New conversation"), recipient,
             Ui.muted("Only you and the other participant can read your messages."));
         people.getStyleClass().add("chat-people");
@@ -115,8 +116,8 @@ public final class MessagesView {
         refresh.setId("messages-refresh"); send.setId("message-send");
         older.setId("messages-load-older"); cancelEdit.setId("message-edit-cancel"); backToInbox.setId("messages-back-to-inbox");
         openSettings.setId("chat-settings-open"); openSettings.setAccessibleText("Chat settings");
-        openSettings.setText("⋯"); openSettings.setTooltip(new Tooltip("Chat settings"));
-        refresh.setText("↻"); refresh.setAccessibleText("Refresh conversation"); refresh.setTooltip(new Tooltip("Refresh conversation"));
+        openSettings.setText(""); openSettings.setGraphic(Icons.of("settings")); openSettings.setTooltip(new Tooltip("Chat settings"));
+        refresh.setText(""); refresh.setGraphic(Icons.of("refresh"));refresh.setAccessibleText("Refresh conversation"); refresh.setTooltip(new Tooltip("Refresh conversation"));
         for (Button button : List.of(refresh, openSettings)) { button.setMinWidth(44); button.setPrefWidth(44); button.setMaxWidth(44); }
         backToInbox.setText("‹ Chats"); backToInbox.setPrefWidth(82); backToInbox.setMaxWidth(82);
         older.setText("Older"); older.setTooltip(new Tooltip("Load older messages")); older.setPrefWidth(72); older.setMaxWidth(72);
@@ -124,6 +125,12 @@ public final class MessagesView {
         historyStatus.setWrapText(false); historyStatus.getStyleClass().add("chat-history-status");
         editNotice.setId("message-edit-notice"); editNotice.getStyleClass().add("chat-edit-notice");
         VBox title = new VBox(4, heading, subtitle); title.setMinWidth(0);
+        conversationAvatar.getStyleClass().add("chat-avatar");
+        conversationAvatar.setMinSize(42,42);conversationAvatar.setPrefSize(42,42);conversationAvatar.setMaxSize(42,42);
+        HBox.setHgrow(title,Priority.ALWAYS);
+        HBox conversationHeading=new HBox(12,conversationAvatar,title);
+        conversationHeading.setMinWidth(0);conversationHeading.setAlignment(Pos.CENTER_LEFT);
+        conversationHeading.getStyleClass().add("chat-conversation-heading");
         cancelEdit.setText("Cancel"); cancelEdit.setMinHeight(32); cancelEdit.setPrefHeight(32); cancelEdit.setMaxWidth(74);
         HBox editBar = new HBox(8, editNotice, cancelEdit); editBar.setAlignment(Pos.CENTER_LEFT); editBar.setMinWidth(0);
         HBox.setHgrow(editNotice, Priority.ALWAYS);
@@ -135,7 +142,7 @@ public final class MessagesView {
         Region footerSpace = new Region(); HBox.setHgrow(footerSpace, Priority.ALWAYS);
         send.setPrefWidth(122); send.setMaxWidth(122);
         HBox footer = new HBox(8, count, footerSpace, send); footer.setAlignment(Pos.CENTER_LEFT); footer.setMinWidth(0);
-        conversation = Ui.card(toolbar, title, historyStatus, transcript, editBar, composer, feedback, footer);
+        conversation = Ui.card(toolbar, conversationHeading, historyStatus, transcript, editBar, composer, feedback, footer);
         conversation.getStyleClass().add("chat-conversation");
         conversation.setMinHeight(0); conversation.setMaxHeight(Double.MAX_VALUE); conversation.setSpacing(8);
         workspace.setId("chat-workspace"); workspace.getStyleClass().add("chat-workspace");
@@ -314,8 +321,11 @@ public final class MessagesView {
             open.setOnAction(event -> { if (!sending) { select(item.contactId(), item.name(), item.canSend()); selectCombo(item.contactId()); } });
             open.setDisable(sending); inbox.getChildren().add(open);
         }
-        if (matches.isEmpty()) inbox.getChildren().add(Ui.muted(conversations.isEmpty()
-            ? "No conversations yet. Choose a person below to start one." : "No conversations match your search."));
+        if (matches.isEmpty()) {
+            VBox empty=WorkspaceCards.empty(conversations.isEmpty()?"Start a conversation":"No matching chats",
+                conversations.isEmpty()?"Choose a person below. Your conversations will stay here.":"Try another name or search term.","messages");
+            empty.getStyleClass().add("chat-empty");inbox.getChildren().add(empty);
+        }
         int total = conversations.stream().mapToInt(AppData.Conversation::unreadCount).sum();
         unread.setText(total == 0 ? conversations.size() + " conversation" + (conversations.size() == 1 ? "" : "s")
             : total + " unread message" + (total == 1 ? "" : "s"));
@@ -358,6 +368,7 @@ public final class MessagesView {
         if (pending != null) editing = pending.original();
         composer.setText(id == null ? "" : pending == null ? drafts.getOrDefault(id, "") : pending.body());
         heading.setText(id == null ? "Choose a conversation" : name);
+        conversationAvatar.setText(id == null ? "…" : initials(name));
         subtitle.setText(id == null ? "Your private conversations stay here." : canSend ? "Private conversation · messages update automatically" : "Past conversation · new messages are unavailable for these account roles");
         showMobileInbox = id == null; adapt(); updateControls(); renderInbox();
         messages.getChildren().setAll(Ui.muted(id == null ? "Choose a conversation or start a new one." : "Loading your messages…"));
@@ -419,7 +430,7 @@ public final class MessagesView {
             if (version != selectionVersion || mutation != mutationVersion || sending) { load(false); return; }
             if (target != null) {
                 conversations.stream().filter(c -> c.contactId().equals(target)).findFirst().ifPresent(c -> {
-                    selectedName = c.name(); selectedCanSend = c.canSend(); heading.setText(c.name());
+                    selectedName = c.name(); selectedCanSend = c.canSend(); heading.setText(c.name());conversationAvatar.setText(initials(c.name()));
                     subtitle.setText(c.canSend() ? "Private conversation · messages update automatically" : "Past conversation · new messages are unavailable for these account roles");
                 });
                 boolean first = !historyLoaded;
@@ -498,8 +509,11 @@ public final class MessagesView {
         Anchor position = olderAnchor == null ? anchor() : olderAnchor;
         boolean follow = forceBottom || (!keepPosition && olderAnchor == null && settings.autoScroll() && transcript.getVvalue() >= 0.92);
         messages.getChildren().clear();
-        if (displayed.isEmpty()) messages.getChildren().add(Ui.muted(selectedId == null
-            ? "Choose a conversation or start a new one." : "This is the start of your conversation. Say hello below."));
+        if (displayed.isEmpty()) {
+            VBox empty=WorkspaceCards.empty(selectedId == null?"A little conversation goes a long way":"Your conversation starts here",
+                selectedId == null?"Choose someone from your conversations or start a new chat.":"Ask a question, share an update or say hello below.","messages");
+            empty.getStyleClass().add("chat-empty");messages.getChildren().add(empty);
+        }
         LocalDate previousDay = null;
         for (AppData.ChatMessage message : displayed) {
             LocalDate day = message.sentAt().toLocalDate();

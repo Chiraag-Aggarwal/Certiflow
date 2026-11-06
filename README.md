@@ -4,7 +4,7 @@ A Java 17 / JavaFX desktop app for student portfolios, NOC approvals, private fe
 
 ## Open the app
 
-On the prepared PC, double-click **Certiflow** on the Desktop. It opens full screen; **Esc** leaves full screen and **F11** toggles it.
+On the prepared PC, double-click **Certiflow** on the Desktop. It opens maximised with the normal Windows title bar. Use the native minimise, restore/maximise and close buttons; drag the window to resize or snap it beside another app. **F11** toggles optional full screen, and **Esc** leaves it.
 
 After changing source code, double-click `run.bat` to rebuild and open the app. The shortcut opens the existing compiled build. Keep `.tools/`, `lib/` and `target/classes/` in this prepared copy because the launcher uses them.
 

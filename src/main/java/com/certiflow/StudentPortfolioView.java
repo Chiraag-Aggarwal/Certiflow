@@ -51,16 +51,24 @@ public class StudentPortfolioView {
         cancel = Ui.secondary("Cancel editing", this::clearEditor); cancel.setId("portfolio-cancel");
         cancel.setVisible(false); cancel.setManaged(false);
         feedback.setId("portfolio-feedback"); feedback.setVisible(false); feedback.setManaged(false);
-        VBox form = Ui.card(editorTitle, Ui.muted("Show your work with projects, certificates, achievements, experience, and documents. Entries are marked as student-provided."),
-            Ui.text("Title"), title, Ui.text("Category"), kind, Ui.text("Description (optional)"), description,
-            Ui.text("Web link (optional)"), link, recipient,
-            Ui.text("Supporting files (optional)"), Ui.muted("Select several PDF, image, or text files. Maximum 25 MB per file."),
-            choose, pending, Ui.grid(2, 160, save, cancel), feedback);
+        VBox attachments = new VBox(12,
+            PageComponents.section("export", "Supporting files", "PDF, images or text · up to 25 MB per file"), choose, pending);
+        attachments.setMinWidth(0);
+        attachments.getStyleClass().add("work-upload-area");
+        VBox form = Ui.card(Ui.row(Icons.of("portfolios"), editorTitle),
+            Ui.muted("Give your projects, certificates and achievements a place to grow. You choose what to share."),
+            Ui.grid(2, 175, field("Title", title), field("Category", kind)),
+            field("Tell the story (optional)", description), field("Project or certificate link (optional)", link),
+            recipient, attachments, Ui.grid(2, 160, save, cancel), feedback);
         form.setId("portfolio-form-panel");
+        form.getStyleClass().add("work-editor");
         search.setId("portfolio-search"); search.setPromptText("Search entries, descriptions, or filenames");
+        search.setAccessibleText("Search your portfolio"); search.setMinWidth(0);
         search.textProperty().addListener((observable, before, after) -> refresh());
         refreshPending(); refresh();
-        VBox saved = new VBox(16, Ui.section("Your portfolio", "Build a collection that grows with your academic work."), search, count, entries);
+        count.getStyleClass().add("work-result-count");
+        VBox filters = Ui.card(search, count); filters.getStyleClass().add("work-filter");
+        VBox saved = new VBox(16, PageComponents.section("portfolios", "Your collection", "A closer look at what you have built and learned."), filters, entries);
         saved.setMinWidth(0); saved.setId("portfolio-list-panel");
         view = Ui.page("My portfolios", "Portfolios", Ui.columns(form, saved));
     }
@@ -83,7 +91,9 @@ public class StudentPortfolioView {
         if (selected.isEmpty()) pending.getChildren().add(Ui.muted("No files selected. You can save an entry with just its details or link."));
         else for (Path path : List.copyOf(selected)) {
             Button remove = Ui.secondary("Remove from selection", () -> { selected.remove(path); refreshPending(); });
-            pending.getChildren().add(new VBox(5, Ui.text(path.getFileName().toString()), remove));
+            VBox selection = new VBox(8, Ui.text(path.getFileName().toString()), remove);
+            selection.setMinWidth(0); selection.getStyleClass().add("work-file-selection");
+            pending.getChildren().add(selection);
         }
     }
 
@@ -173,20 +183,23 @@ public class StudentPortfolioView {
         List<AppData.PortfolioItem> ungrouped = files.stream().filter(f -> f.projectId() == null || f.projectId().isBlank())
             .filter(f -> (f.title() + " " + f.fileName()).toLowerCase(Locale.ROOT).contains(query)).toList();
         if (!ungrouped.isEmpty()) {
-            VBox legacy = Ui.card(Ui.title("Individual documents"), Ui.muted("Your earlier documents are still saved privately."));
+            VBox legacy = Ui.card(PageComponents.section("noc", "Individual documents", "Your earlier documents are still saved privately."));
+            legacy.getStyleClass().add("work-record");
             ungrouped.forEach(f -> legacy.getChildren().add(fileCard(f)));
             entries.getChildren().add(legacy);
         }
         count.setText(projects.size() + " entries · " + files.size() + " supporting files");
-        if (matches == 0 && ungrouped.isEmpty()) entries.getChildren().add(Ui.card(Ui.title(query.isEmpty() ? "Your next achievement belongs here" : "No matching entries"),
-            Ui.muted(query.isEmpty() ? "Start with a project, a certificate, or something you are proud of. Add a description, a link, or supporting files whenever you are ready." : "Try another title, category, or filename.")));
+        if (matches == 0 && ungrouped.isEmpty()) entries.getChildren().add(WorkspaceCards.empty(query.isEmpty() ? "Your next achievement belongs here" : "No matching entries",
+            query.isEmpty() ? "Start with a project, a certificate, or something you are proud of. Add a description, a link, or supporting files whenever you are ready." : "Try another title, category, or filename.", "portfolios"));
     }
 
     private VBox projectCard(AppData.Project project, List<AppData.PortfolioItem> files) {
-        VBox card = Ui.card(Ui.title(project.title()), Ui.muted(project.kind() + " · " + Ui.date(project.createdAt())),
+        VBox card = Ui.card(PageComponents.section("portfolios", project.title(), "Added " + Ui.date(project.createdAt())),
+            PageComponents.tag(project.kind(), "work-category"),
             Ui.muted("Student-provided content · achievements are not independently verified"),
             Ui.muted(project.recipientId() == null || project.recipientId().isBlank() ? "Private · visible to you and administrators" : "Shared with " + App.data().contactName(project.recipientId()) + " and administrators"));
         card.setId("portfolio-entry-" + project.id());
+        card.getStyleClass().addAll("work-record", "work-project");
         if (!project.description().isBlank()) card.getChildren().add(Ui.text(project.description()));
         if (!project.link().isBlank()) card.getChildren().add(Ui.secondary("Open project link", () -> App.openWebLink(project.link())));
         if (project.recipientId() != null && !project.recipientId().isBlank()) card.getChildren().add(Ui.messageContact("Message assigned staff", project.recipientId()));
@@ -202,7 +215,9 @@ public class StudentPortfolioView {
             Button dismiss = Ui.secondary("Dismiss failed selection", () -> { retryUploads.remove(project.id()); refresh(); });
             card.getChildren().add(Ui.card(Ui.text(failureMessage(retry)), retryButton, dismiss));
         }
-        card.getChildren().add(Ui.muted(files.size() + " supporting file(s)"));
+        Label fileCount = Ui.muted(files.size() + " supporting file(s)");
+        fileCount.getStyleClass().add("work-result-count");
+        card.getChildren().add(fileCount);
         files.forEach(file -> card.getChildren().add(fileCard(file)));
         return card;
     }
@@ -261,7 +276,16 @@ public class StudentPortfolioView {
             }, error -> { refresh(); Ui.feedback(feedback, error.getMessage(), false); });
         });
         remove.setId("portfolio-remove-" + item.id()); remove.getStyleClass().add("danger-button");
-        return Ui.card(Ui.text(item.title()), Ui.muted(item.fileName() + " · " + Ui.date(item.addedAt())), Ui.grid(3, 90, open, renameButton, remove), editor);
+        VBox card = Ui.card(PageComponents.section("noc", item.title(), item.fileName() + " · " + Ui.date(item.addedAt())),
+            Ui.grid(3, 90, open, renameButton, remove), editor);
+        card.getStyleClass().add("work-file-card");
+        return card;
+    }
+
+    private static VBox field(String title, Control control) {
+        Label label = Ui.text(title); label.setLabelFor(control); label.getStyleClass().add("work-field-label");
+        control.setMinWidth(0);
+        VBox field = new VBox(8, label, control); field.setMinWidth(0); return field;
     }
 
     private void openDocument(AppData.PortfolioItem item) {

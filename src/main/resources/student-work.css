@@ -1,0 +1,29 @@
+/* Forms and saved work share palette colours; status accents keep their meaning in every theme. */
+.app-page .work-editor { -fx-padding: 26px; -fx-border-color: -cf-accent -cf-border -cf-border -cf-border; -fx-border-width: 3px 1px 1px 1px; -fx-background-radius: 20px; -fx-border-radius: 20px; }
+.app-page .work-field-label { -fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: -cf-muted; }
+.app-page .work-filter { -fx-padding: 20px; -fx-background-color: -cf-soft; -fx-border-color: transparent; -fx-effect: null; }
+.app-page .work-result-count { -fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: -cf-accent; }
+.app-page .work-summary { -fx-padding: 16px; -fx-background-radius: 14px; -fx-border-radius: 14px; -fx-border-width: 1px; -fx-border-color: -cf-border; }
+.app-page .work-summary .app-heading { -fx-font-size: 25px; }
+.app-page .work-pending { -fx-background-color: -cf-warn-bg; -fx-border-color: transparent; }
+.app-page .work-pending .app-heading { -fx-text-fill: -cf-warn; }
+.app-page .work-approved { -fx-background-color: -cf-good-bg; -fx-border-color: transparent; }
+.app-page .work-approved .app-heading { -fx-text-fill: -cf-good; }
+.app-page .work-rejected { -fx-background-color: -cf-bad-bg; -fx-border-color: transparent; }
+.app-page .work-rejected .app-heading { -fx-text-fill: -cf-bad; }
+.app-page .work-record { -fx-padding: 22px; -fx-background-radius: 20px; -fx-border-radius: 20px; -fx-border-width: 3px 1px 1px 1px; -fx-border-color: -cf-accent -cf-border -cf-border -cf-border; }
+.app-page .work-record-pending { -fx-border-color: -cf-warn -cf-border -cf-border -cf-border; }
+.app-page .work-record-approved { -fx-border-color: -cf-good -cf-border -cf-border -cf-border; }
+.app-page .work-record-rejected { -fx-border-color: -cf-bad -cf-border -cf-border -cf-border; }
+.app-page .work-record .work-reference { -fx-font-size: 11px; }
+.app-page .work-category { -fx-background-color: -cf-tint; -fx-text-fill: -cf-accent; -fx-background-radius: 18px; -fx-padding: 5px 12px; -fx-font-size: 11px; -fx-font-weight: bold; }
+.app-page .work-note { -fx-padding: 14px; -fx-background-color: -cf-soft; -fx-background-radius: 12px; -fx-border-color: -cf-accent; -fx-border-width: 0 0 0 3px; }
+.app-page .work-note > .app-text { -fx-font-size: 12px; -fx-font-weight: bold; }
+.app-page .work-upload-area { -fx-padding: 18px; -fx-background-color: -cf-soft; -fx-background-radius: 16px; -fx-border-color: -cf-border; -fx-border-style: dashed; -fx-border-radius: 16px; }
+.app-page .work-file-selection { -fx-padding: 12px; -fx-background-color: -cf-surface; -fx-background-radius: 10px; }
+.app-page .work-file-card, .app-page .app-card .work-file-card { -fx-padding: 16px; -fx-background-color: -cf-soft; -fx-effect: null; -fx-border-color: transparent; -fx-background-radius: 14px; }
+.app-page .work-file-card .app-heading { -fx-font-size: 15px; }
+.app-page:compact .work-editor, .app-page:compact .work-record { -fx-padding: 18px; }
+.app-page:compact .work-filter { -fx-padding: 16px; }
+.app-page:compact .work-summary { -fx-padding: 13px; }
+.app-page:compact .work-upload-area { -fx-padding: 14px; }

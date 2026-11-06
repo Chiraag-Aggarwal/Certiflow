@@ -178,6 +178,8 @@ class UiFlowTest {
                 assertEquals("Java, research",App.user().skills());assertEquals("https://example.invalid/profile",App.user().website());
                 assertEquals(role,App.user().role());assertEquals("account0@example.invalid",App.user().email());
                 assertFalse(App.user().identityVerified());assertTrue(label("profile-verification").getText().contains("self-reported"));
+                assertEquals(1.0, control("profile-completion", ProgressBar.class).getProgress());
+                assertEquals(5, stage.getScene().getRoot().lookupAll(".profile-step-complete").size());
                 assertEquals(7,backend.lastBody.size());
                 for(String protectedField:List.of("role","email","identity_verified","verified_by","verified_at"))assertFalse(backend.lastBody.has(protectedField));
                 return null;
@@ -197,24 +199,67 @@ class UiFlowTest {
                 pages.add(new PageCase("discover",App::showViewerHome));pages.add(new PageCase("profile",App::showViewerProfile));
             } else {
                 pages.add(new PageCase("shared-portfolios",App::showSharedPortfolios));pages.add(new PageCase("profile",App::showTeacherProfile));
+                pages.add(new PageCase("requests",App::showTeacherDashboard));pages.add(new PageCase("history",App::showTeacherHistory));
+                pages.add(new PageCase("students",App::showTeacherStudentList));pages.add(new PageCase("reports",App::showTeacherReportExport));
                 if(role==AppData.Role.ADMIN)pages.add(new PageCase("accounts",App::showAccountManagement));
             }
+            if(role!=AppData.Role.VIEWER)pages.add(new PageCase("community",App::showCommunity));
             pages.add(new PageCase("messages",App::showMessages));
             for(PageCase page:pages) fx(()->{
                 page.open().run();
-                for(int width:new int[]{320,390,768,1366}) {
+                for(int width:new int[]{320,390,768,960,1366}) {
                     resize(width,844);assertHorizontalFit(stage.getScene().getRoot(),width);assertNoDemoText(stage.getScene().getRoot());
                     if(width==390||width==1366)capture(role.name().toLowerCase()+"-"+page.name()+"-"+width);
                 }
                 if(page.name().equals("home")) {
                     resize(1920,1080);assertHorizontalFit(stage.getScene().getRoot(),1920);capture(role.name().toLowerCase()+"-home-1920");
-                    UiSettings.dark.set(true);resize(1366,844);assertHorizontalFit(stage.getScene().getRoot(),1366);capture(role.name().toLowerCase()+"-home-dark-1366");
-                    UiSettings.dark.set(false);
                 }
+                UiSettings.dark.set(true);resize(1366,844);assertHorizontalFit(stage.getScene().getRoot(),1366);capture(role.name().toLowerCase()+"-"+page.name()+"-dark-1366");
+                UiSettings.dark.set(false);
                 App.showHome();return null;
             });
         }
     }
+    @Test void populatedWorkPagesKeepRecordsAndReportFiltersConsistentAtNarrowAndWideSizes() throws Exception {
+        backend.role=AppData.Role.STUDENT;
+        var student=data.authenticate("account0@example.invalid","long-password-test").orElseThrow();
+        data.createProject(student,"Accessible campus navigation research","Project",
+            "Exploring practical routes and documenting findings with clear supporting evidence.","",TestBackend.TEACHER_ID);
+        data.submit(student,AppData.REQUEST_TYPES.get(0),"Please review my request and the supporting context.");
+        var decided=data.submit(student,AppData.REQUEST_TYPES.get(1),"The event dates and institution requirements are confirmed.");
+        fx(()->{
+            App.completeLogin(student);
+            for(PageCase page:List.of(new PageCase("portfolio",App::showStudentPortfolio),new PageCase("noc",App::showStudentNoc))){
+                page.open().run();
+                for(int width:new int[]{390,1366}){resize(width,900);assertHorizontalFit(stage.getScene().getRoot(),width);capture("populated-student-"+page.name()+"-"+width);}
+            }
+            return null;
+        });
+        backend.role=AppData.Role.ADMIN;
+        var admin=data.authenticate("account0@example.invalid","long-password-test").orElseThrow();
+        data.decide(admin,decided.id(),AppData.Status.APPROVED,"The supplied details are complete.");
+        fx(()->{
+            App.completeLogin(admin);
+            for(PageCase page:List.of(new PageCase("requests",App::showTeacherDashboard),new PageCase("history",App::showTeacherHistory),
+                    new PageCase("reports",App::showTeacherReportExport),new PageCase("portfolios",App::showSharedPortfolios))){
+                page.open().run();
+                if(page.name().equals("reports")) {
+                    control("report-range",ComboBox.class).setValue("All records");
+                    assertTrue(containsText(control("report-preview-panel",VBox.class),"2 requests · 1 pending · 1 approved · 0 rejected"));
+                }
+                if(page.name().equals("history")) {
+                    control("history-filter",ComboBox.class).setValue("Rejected");
+                    assertTrue(control("history-card-grid",GridPane.class).lookupAll(".review-record").isEmpty());
+                    control("history-filter",ComboBox.class).setValue("All decisions");
+                    assertEquals(1,control("history-card-grid",GridPane.class).lookupAll(".review-record").size());
+                }
+                for(int width:new int[]{390,1366}){resize(width,900);assertHorizontalFit(stage.getScene().getRoot(),width);capture("populated-staff-"+page.name()+"-"+width);}
+            }
+            App.showTeacherProfile();resize(1366,900);control("page-scroll",ScrollPane.class).setVvalue(0.35);layout();capture("profile-completion-detail-1366");
+            return null;
+        });
+    }
+
     @Test void privateRemarkComposerSendsAndPreservesDraftOnFailureWhileStudentsOnlyRead() throws Exception {
         backend.role=AppData.Role.ADMIN;
         var admin=data.authenticate("account0@example.invalid","long-password-test").orElseThrow();

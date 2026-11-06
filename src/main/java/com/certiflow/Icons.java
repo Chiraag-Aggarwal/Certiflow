@@ -24,6 +24,7 @@ final class Icons {
             case "back" -> "M14 5 L7 12 L14 19 M7 12 H21";
             case "close" -> "M6 6 L18 18 M18 6 L6 18";
             case "fullscreen" -> "M3 9 V3 H9 M15 3 H21 V9 M21 15 V21 H15 M9 21 H3 V15";
+            case "refresh" -> "M20 8 A8 8 0 1 0 20 16 M20 3 V8 H15";
             default -> "M3 9 L12 4 L21 9 L12 14 Z M6 11 V17 Q12 22 18 17 V11 M21 9 V17";
         };
         SVGPath icon = new SVGPath();

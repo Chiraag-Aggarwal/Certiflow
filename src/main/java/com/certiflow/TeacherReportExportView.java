@@ -12,6 +12,7 @@ import java.util.List;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 
@@ -22,6 +23,8 @@ public class TeacherReportExportView {
     private final Label period = Ui.muted("");
     private final Label summary = Ui.text("");
     private final Label result = Ui.muted("");
+    private final GridPane totals = Ui.grid(3, 100);
+    private final VBox sample = new VBox(10);
     private final Button export;
 
     public TeacherReportExportView() {
@@ -32,14 +35,22 @@ public class TeacherReportExportView {
         export = Ui.button("Save CSV report", this::exportReport);
         export.setId("report-save");
         range.valueProperty().addListener((observable, before, after) -> refreshPreview());
-        VBox settings = Ui.card(Ui.section("NOC request report",
-                "Save a CSV file that opens in Excel or another spreadsheet app."),
+        VBox settings = Ui.card(PageComponents.section("export", "Build your report",
+                "Choose a period, review the records, then save a spreadsheet-ready CSV."),
+                PageComponents.tag("01 · CHOOSE A PERIOD", "review-caption"),
                 Ui.text("Report period"), range,
-                Ui.muted("Includes requests submitted or decided in the selected period, with their current status and decision notes."));
+                Ui.muted("Includes requests submitted or decided in the selected period, with their current status and decision notes."),
+                PageComponents.tag("WHAT'S INCLUDED", "review-caption"),
+                Ui.text("Student and application references\nApplication type, reason and status\nSubmission and decision dates\nDecision notes"),
+                Ui.muted("Only records available to your account are exported. Private remarks and conversations are not included."));
         settings.setId("report-settings-panel");
-        VBox preview = Ui.card(Ui.section("Report preview", "Check the selected records before saving."),
-                period, summary, export, result);
+        settings.getStyleClass().add("report-settings");
+        VBox preview = Ui.card(PageComponents.section("history", "Ready to export", "Review your selection before choosing where to save it."),
+                PageComponents.tag("02 · REVIEW & SAVE", "review-caption"), period, summary, totals, sample, export, result);
         preview.setId("report-preview-panel");
+        preview.getStyleClass().add("report-preview");
+        summary.getStyleClass().add("report-summary");
+        sample.setMinWidth(0);
         view = Ui.page("Export report", "Export",
                 Ui.columns(settings, preview));
         refreshPreview();
@@ -62,6 +73,22 @@ public class TeacherReportExportView {
         long rejected = requests.stream().filter(r -> r.status() == AppData.Status.REJECTED).count();
         summary.setText(requests.size() + " requests · " + pending + " pending · " + approved
                 + " approved · " + rejected + " rejected");
+        totals.getChildren().setAll(PageComponents.tag(pending + " pending", "review-warn"),
+                PageComponents.tag(approved + " approved", "review-good"),
+                PageComponents.tag(rejected + " rejected", "review-bad"));
+        sample.getChildren().clear();
+        // This is a preview of the selected server records, never fabricated example rows.
+        if (requests.isEmpty()) {
+            sample.getChildren().add(WorkspaceCards.empty("No records in this period",
+                    "Choose All records to check a wider period, or save a file with column headings only.", "export"));
+        } else {
+            sample.getChildren().add(Ui.muted("Preview · first " + Math.min(3, requests.size()) + " selected records"));
+            requests.stream().limit(3).forEach(request -> {
+                VBox row = Ui.card(Ui.text(request.studentName()), Ui.muted(request.type()), Ui.status(request.status()));
+                row.getStyleClass().add("report-preview-row");
+                sample.getChildren().add(row);
+            });
+        }
         result.setText(requests.isEmpty() ? "This period has no requests. The CSV will contain column headings only." : "");
     }
 

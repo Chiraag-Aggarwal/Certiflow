@@ -22,7 +22,7 @@ Registration opens **Verify your email** automatically with your email filled in
 
 The student/staff ID is optional. Enter your institution's roll number or employee ID if you have one; otherwise leave it blank. Profiles show **Not provided** for missing IDs. The verified email identifies your sign-in account.
 
-The app opens full-screen on every launch. Press **Esc** to leave full screen, or **F11** to toggle it. Signed-in pages also have a full-screen button in the top bar. Leaving full screen does not change the startup behaviour.
+The app starts maximised with the standard Windows title bar and controls. Minimise it, restore a smaller window, resize its edges, or snap it beside another app. Full screen is optional: press **F11** or use the signed-in top-bar button; **Esc** leaves full screen. Restarting returns to a normal maximised window.
 
 ## Run a GitHub clone
 
@@ -63,7 +63,7 @@ See [database/README.md](../database/README.md). The current connected project h
 - **Publication privacy:** sharing publishes a separate preview. It excludes account emails, institution IDs, private descriptions, NOC reasons, staff notes, recipients, and conversations. NOC type and status come from the original application. Students can publish self-described work but cannot forge approval status. Set the audience to **Private** to revoke sharing; republishing produces a new link. Copies already downloaded by viewers cannot be recalled.
 - **Recruiter / Viewer workspace:** Discover offers search and filters over community publications, selected supporting files, and public links. The profile form includes an optional organisation and professional interests. This account type does not verify a company. Whole-profile public pages and direct recruiter-to-student contact requests are not implemented; viewers can currently contact staff.
 
-The dashboards show actual recent applications, portfolio highlights, profile completion, and useful next steps. Completion measures filled fields; it does not verify a person's claims or confer staff access.
+The dashboards show actual recent applications, portfolio highlights, profile completion, and useful next steps. The profile meter shows a percentage and checklist of five saved details: name, department/organisation, programme/interests, biography and skills. Completion measures filled fields; it does not verify a person's claims or confer staff access.
 
 The menu stays at the top. **Back** is in the page area below the header; it uses page history and resets on logout. At wide sizes, hover at the left edge or press Alt+M to open navigation. At narrow sizes, main routes remain in the bottom bar. Escape closes the drawer. **Profile** stays at the bottom of the menu directly above **Log out**, and appearance controls remain inside the menu.
 

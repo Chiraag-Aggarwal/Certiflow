@@ -139,7 +139,10 @@ public final class Ui {
         HBox.setHgrow(actionSpace, Priority.ALWAYS);
         HBox pageActions = row(goBack, actionSpace, refreshData);
         pageActions.setId("page-actions");
-        VBox pageHeading = new VBox(12, pageActions, pageTitle);
+        // Home/discovery already have an illustrated welcome; chat keeps a compact toolbar.
+        boolean hasWelcome = List.of("Home", "Discover", "Community", "Messages").contains(active);
+        Node introduction = hasWelcome ? pageTitle : PageComponents.pageHeading(heading, active);
+        VBox pageHeading = new VBox(16, pageActions, introduction);
         pageHeading.getStyleClass().add("page-heading");
         VBox body = new VBox(24, pageHeading);
         body.setId("page-content");
